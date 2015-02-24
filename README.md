@@ -1,1 +1,1 @@
-GDI+ standard library for AUtohotkey
+GDI+ standard library for Autohotkey
