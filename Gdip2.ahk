@@ -13,7 +13,7 @@ brush1.Dispose()
 obj1.Dispose()
 Gdip1.Dispose()
 
-/*
+
 ; Retain original methods to allow user to refine control if needed
 Gdip2 := new Gdip()
 Gui, 1: -Caption +E0x80000 +LastFound +AlwaysOnTop +ToolWindow +OwnDialogs
@@ -27,15 +27,15 @@ hgdiObj := obj2.SelectObject(hdc, hBitmap)
 pGraphics := obj2.GraphicsFromHDC(hdc)
 obj2.SetSmoothingMode(pGraphics, 4)
 brush := new Gdip2.Brush(0xff0000ff)
-obj2._FillEllipse(pGraphics, brush.pointer, 0, 0, 100, 100)
+obj2.FillEllipse(pGraphics, brush.pointer, 0, 0, 100, 100)
 brush1.DeleteBrush()
-win2._UpdateLayeredWindow(hwnd1, hdc, 650, 500, 300, 300)
+win2.UpdateLayeredWindow(hwnd1, hdc, 650, 500, 300, 300)
 obj2.SelectObject(hdc, hgdiObj)
 obj2.DeleteObject(hBitmap)
 obj2.DeleteDC(hdc)
 obj2.DeleteGraphics(pGraphics)
 Gdip2.Shutdown()
-*/
+
 return
 
 ;#######################################################################
@@ -139,10 +139,10 @@ class Gdip
 		
 		Update(obj, point, size, alpha=255)
 		{
-			return this._UpdateLayeredWindow(this.hwnd, obj.hdc, point.x, point.y, size.w, size.h, alpha)
+			return this.UpdateLayeredWindow(this.hwnd, obj.hdc, point.x, point.y, size.w, size.h, alpha)
 		}
 		
-		_UpdateLayeredWindow(hwnd, hdc, x="", y="", w="", h="", alpha=255)
+		UpdateLayeredWindow(hwnd, hdc, x="", y="", w="", h="", alpha=255)
 		{
 			if ((x != "") && (y != ""))
 				VarSetCapacity(pt, 8), NumPut(x, pt, 0, "uint"), NumPut(y, pt, 4, "uint")
@@ -248,14 +248,27 @@ class Gdip
 			return DllCall("gdiplus\GdipSetSmoothingMode", "uptr", pGraphics, "int", smoothingMode)
 		}
 		
-		FillEllipse(brush, point, size)
+		;brush, point, size
+		;pGraphics, brush, x, y, w, h
+		FillEllipse(params*)
 		{
-			return this._FillEllipse(this.pGraphics, brush.pointer, point.x, point.y, size.w, size.h)
+			c := params.MaxIndex()
+			if (c = 3)
+			{
+				 E := this._FillEllipse(this.pGraphics, params[1].pointer, params[2].x, params[2].y, params[3].w, params[3].h)
+			}
+			else if (c = 6)
+			{
+				E := this._FillEllipse(params[1], params[2], params[3], params[4], params[5], params[6])
+			}
+			else
+				throw "Incorrect number of parameters for FillEllipse"
+			return E
 		}
-		
-		_FillEllipse(pGraphics, brush, x, y, w, h)
+
+		_FillEllipse(pGraphics, pBrush, x, y, w, h)
 		{
-			return DllCall("gdiplus\GdipFillEllipse", "uptr", pGraphics, "uptr", brush, "float", x, "float", y, "float", w, "float", h)
+			return DllCall("gdiplus\GdipFillEllipse", "uptr", pGraphics, "uptr", pBrush, "float", x, "float", y, "float", w, "float", h)
 		}
 	}
 }
