@@ -13,7 +13,7 @@ brush1.Dispose()
 obj1.Dispose()
 Gdip1.Dispose()
 
-
+/*
 ; Retain original methods to allow user to refine control if needed
 Gdip2 := new Gdip()
 Gui, 1: -Caption +E0x80000 +LastFound +AlwaysOnTop +ToolWindow +OwnDialogs
@@ -35,7 +35,7 @@ obj2.DeleteObject(hBitmap)
 obj2.DeleteDC(hdc)
 obj2.DeleteGraphics(pGraphics)
 Gdip2.Shutdown()
-
+*/
 return
 
 ;#######################################################################
