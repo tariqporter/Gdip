@@ -4,6 +4,8 @@
 #include Gdip2.ahk
 
 gdip := new Gdip()
+if (!FileExist("Capture"))
+	FileCreateDir, Capture
 return
 
 ;#####################################################################################

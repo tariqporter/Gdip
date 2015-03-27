@@ -130,16 +130,24 @@ class Gdip
 	{
 		__New(params*)
 		{
+			;size
 			;point, size
 			c := params.MaxIndex()
 			if (!c)
 			{
 			}
+			else if (c = 1)
+			{
+				size := params[1]
+				this.hwnd := DllCall("CreateWindowEx", "uint", 0x80088, "str", "#32770", "ptr", 0, "uint", 0x940A0000
+				,"int", 0, "int", 0, "int", size.Width, "int", size.Height, "uptr", 0, "uptr", 0, "uptr", 0, "uptr", 0)
+			}
 			else if (c = 2)
 			{
 				point := params[1]
 				size := params[2]
-				this.hwnd := DllCall("CreateWindowEx", "uint", 0x80088, "str", "#32770", "ptr", 0, "uint", 0x940A0000,"int", point.X, "int", point.Y, "int", size.Width, "int", size.Height, "uptr", 0, "uptr", 0, "uptr", 0, "uptr", 0)
+				this.hwnd := DllCall("CreateWindowEx", "uint", 0x80088, "str", "#32770", "ptr", 0, "uint", 0x940A0000
+				,"int", point.X, "int", point.Y, "int", size.Width, "int", size.Height, "uptr", 0, "uptr", 0, "uptr", 0, "uptr", 0)
 			}
 			else
 				throw "Incorrect number of parameters for Window.New()"
@@ -152,6 +160,21 @@ class Gdip
 			this.Size := new Gdip.Size(size.Width, size.Height)
 		}
 		
+		IsHover(point, size)
+		{
+			CoordMode, Mouse, Screen
+			MouseGetPos, x, y
+			return x >= this.X + point.X && x <= this.X + point.X + size.Width && y >= this.Y + point.Y && y <= this.Y + point.Y + size.Height
+		}
+		
+		Drag()
+		{
+			CoordMode, Mouse, Screen
+			MouseGetPos,,, win
+			if (win = this.hwnd)
+				PostMessage, 0xA1, 2,,, % "ahk_id " this.hwnd
+		}
+
 		;obj
 		;obj, point
 		;obj, point, size
@@ -163,7 +186,8 @@ class Gdip
 			alpha := 255
 			if (c = 1)
 			{
-				point := { X: "", Y: "" }
+				WinGetPos, x, y, w, h, % "ahk_id " this.hwnd
+				point := new Gdip.Point(x, y)
 				size := obj
 			}
 			else if (c = 2)
@@ -591,13 +615,29 @@ class Gdip
 			pBitmap := this.CreateBitmap(size.Width, size.Height)
 			pGraphics := this.GraphicsFromImage(pBitmap)
 			obj := new Gdip.Object()
-			E := obj._DrawImage(pGraphics, this.Pointer, 0, 0, size.Width, size.Height, 0, 0, this.Width, this.Height)
+			E := obj._DrawImage(pGraphics, this.Pointer, 0, 0, size.Width, size.Height, 0, 0, this.Width, this.Height, 0)
 			this.DisposeImage(this.Pointer)
 			this.DeleteGraphics(pGraphics)
 			this.Pointer := pBitmap
 			this.Size := size
 			this.Width := size.Width
 			this.Height := size.Height
+			return this
+		}
+		
+		ApplyColorMatrix(matrix)
+		{
+			pBitmap := this.CreateBitmap(this.Width, this.Height)
+			pGraphics := this.GraphicsFromImage(pBitmap)
+			obj := new Gdip.Object()
+			matrix := (matrix + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,matrix,0],[0,0,0,0,1]] : matrix
+			imageAttr := obj.SetImageAttributesColorMatrix(matrix)
+			E := obj._DrawImage(pGraphics, this.Pointer, 0, 0, this.Width, this.Height, 0, 0, this.Width, this.Height, imageAttr)
+			obj.DisposeImageAttributes(imageAttr)
+			this.DisposeImage(this.Pointer)
+			this.DeleteGraphics(pGraphics)
+			this.Pointer := pBitmap
+			return this
 		}
 		
 		GetImageWidth(pBitmap)
@@ -736,7 +776,8 @@ class Gdip
 			c := params.MaxIndex()
 			if (c = 3)
 			{
-				 E := this._FillRectangle(this.pGraphics, params[1].Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height)
+				;MsgBox, % this.pGraphics, params[1].Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height
+				E := this._FillRectangle(this.pGraphics, params[1].Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height)
 			}
 			else if (c = 6)
 			{
@@ -775,7 +816,6 @@ class Gdip
 			return DllCall("gdiplus\GdipFillEllipse", "uptr", pGraphics, "uptr", pBrush, "float", x, "float", y, "float", w, "float", h)
 		}
 		
-		
 		;1
 		;bitmap
 		
@@ -796,11 +836,12 @@ class Gdip
 		;4
 		;bitmap,point,size,opacity
 		;bitmap,point,size,matrix
-		;pGraphics, bitmap,point,opacity
-		;pGraphics, bitmap,point,matrix
-		;pGraphics, bitmap,point, size
+		;pGraphics,bitmap,point,opacity
+		;pGraphics,bitmap,point,matrix
+		;pGraphics,bitmap,point, size
 		
 		;5
+		;bitmap,point,size,point,size
 		;pGraphics,bitmap,point,size,opacity
 		;pGraphics,bitmap,point,size,matrix
 		DrawImage(params*)
@@ -825,9 +866,10 @@ class Gdip
 				else if (params[1].__Class = "Gdip.Bitmap")
 				{
 					bitmap := params[1]
-					matrix := (params[2] + 0 > 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[2],0],[0,0,0,0,1]] : params[2]
-					matrix := this.SetImageAttributesColorMatrix(matrix)
-					E := this._DrawImage(this.pGraphics, bitmap.Pointer, 0, 0, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, matrix)
+					matrix := (params[2] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[2],0],[0,0,0,0,1]] : params[2]
+					imageAttr := this.SetImageAttributesColorMatrix(matrix)
+					E := this._DrawImage(this.pGraphics, bitmap.Pointer, 0, 0, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, imageAttr)
+					this.DisposeImageAttributes(imageAttr)
 				}
 				;pGraphics,bitmap
 				else
@@ -849,9 +891,10 @@ class Gdip
 				else if (params[1].__Class = "Gdip.Bitmap")
 				{
 					bitmap := params[1]
-					matrix := (params[3] + 0 > 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[2],0],[0,0,0,0,1]] : params[3]
-					matrix := this.SetImageAttributesColorMatrix(matrix)
-					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, matrix)
+					matrix := (params[3] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[3],0],[0,0,0,0,1]] : params[3]
+					imageAttr := this.SetImageAttributesColorMatrix(matrix)
+					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, imageAttr)
+					this.DisposeImageAttributes(imageAttr)
 				}
 				;pGraphics,bitmap,point
 				else if (params[3].__Class = "Gdip.Point")
@@ -864,9 +907,10 @@ class Gdip
 				else
 				{
 					bitmap := params[2]
-					matrix := (params[3] + 0 > 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[2],0],[0,0,0,0,1]] : params[3]
-					matrix := this.SetImageAttributesColorMatrix(matrix)
-					E := this._DrawImage(params[1], bitmap.Pointer, 0, 0, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, matrix)
+					matrix := (params[3] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[3],0],[0,0,0,0,1]] : params[3]
+					imageAttr := this.SetImageAttributesColorMatrix(matrix)
+					E := this._DrawImage(params[1], bitmap.Pointer, 0, 0, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, imageAttr)
+					this.DisposeImageAttributes(imageAttr)
 				}
 			}
 			else if (c = 4)
@@ -876,16 +920,48 @@ class Gdip
 				if (params[1].__Class = "Gdip.Bitmap")
 				{
 					bitmap := params[1]
-					matrix := (params[3] + 0 > 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[2],0],[0,0,0,0,1]] : params[3]
-					matrix := this.SetImageAttributesColorMatrix(matrix)
-					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, matrix)
+					matrix := (params[4] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[4],0],[0,0,0,0,1]] : params[4]
+					imageAttr := this.SetImageAttributesColorMatrix(matrix)
+					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, 0, 0, bitmap.Width, bitmap.Height, imageAttr)
+					this.DisposeImageAttributes(imageAttr)
+				}
+				;pGraphics,bitmap,point, size
+				else if (params[4].__Class = "Gdip.Size")
+				{
+					bitmap := params[2]
+					E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, params[4].Width, params[4].Height, 0, 0, bitmap.Width, bitmap.Height, 0)
+				}
+				;pGraphics, bitmap,point,opacity
+				;pGraphics, bitmap,point,matrix
+				else
+				{
+					bitmap := params[2]
+					matrix := (params[4] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[4],0],[0,0,0,0,1]] : params[4]
+					imageAttr := this.SetImageAttributesColorMatrix(matrix)
+					E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, imageAttr)
+					this.DisposeImageAttributes(imageAttr)
 				}
 			}
 			else if (c = 5)
 			{
+				;bitmap,point,size,point,size
+				if (params[1].__Class = "Gdip.Bitmap")
+				{
+					E := this._DrawImage(this.pGraphics, params[1].Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, params[4].X, params[4].Y, params[5].Width, params[5].Height, 0)
+				}
+				;pGraphics,bitmap,point,size,opacity
+				;pGraphics,bitmap,point,size,matrix
+				else
+				{
+					bitmap := params[2]
+					matrix := (params[5] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[5],0],[0,0,0,0,1]] : params[5]
+					imageAttr := this.SetImageAttributesColorMatrix(matrix)
+					E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, params[4].Width, params[4].Height, 0, 0, bitmap.Width, bitmap.Height, imageAttr)
+					this.DisposeImageAttributes(imageAttr)
+				}
 			}
-			
-			;E := this._DrawImage(pGraphics, bitmap.Pointer, dx, dy, dw, dh, 0, 0, bitmap.Width, bitmap.Height, matrix)
+			else
+				throw "Incorrect number of parameters for Object.DrawImage()"
 			return E
 		}
 		
@@ -900,6 +976,7 @@ class Gdip
 				
 		SetImageAttributesColorMatrix(matrix)
 		{
+			VarSetCapacity(colorMatrix, 100, 0)
 			loop 5
 			{
 				i := A_Index
@@ -912,6 +989,11 @@ class Gdip
 			DllCall("gdiplus\GdipCreateImageAttributes", "uptr*", imageAttr)
 			DllCall("gdiplus\GdipSetImageAttributesColorMatrix", "uptr", imageAttr, "int", 1, "int", 1, "uptr", &colorMatrix, "uptr", 0, "int", 0)
 			return imageAttr
+		}
+		
+		DisposeImageAttributes(imageAttr)
+		{
+			return DllCall("gdiplus\GdipDisposeImageAttributes", "uptr", imageAttr)
 		}
 		
 		;brush, point, size, r
