@@ -139,18 +139,18 @@ class Gdip
 			else if (c = 1)
 			{
 				size := params[1]
-				this.hwnd := DllCall("CreateWindowEx", "uint", 0x80088, "str", "#32770", "ptr", 0, "uint", 0x940A0000
-				,"int", 0, "int", 0, "int", size.Width, "int", size.Height, "uptr", 0, "uptr", 0, "uptr", 0, "uptr", 0)
+				point := new Gdip.Point(0, 0)
 			}
 			else if (c = 2)
 			{
 				point := params[1]
 				size := params[2]
-				this.hwnd := DllCall("CreateWindowEx", "uint", 0x80088, "str", "#32770", "ptr", 0, "uint", 0x940A0000
-				,"int", point.X, "int", point.Y, "int", size.Width, "int", size.Height, "uptr", 0, "uptr", 0, "uptr", 0, "uptr", 0)
 			}
 			else
 				throw "Incorrect number of parameters for Window.New()"
+
+			this.hwnd := DllCall("CreateWindowEx", "uint", 0x80088, "str", "#32770", "ptr", 0, "uint", 0x940A0000
+			,"int", point.X, "int", point.Y, "int", size.Width, "int", size.Height, "uptr", 0, "uptr", 0, "uptr", 0, "uptr", 0)
 				
 			this.X := point.X
 			this.Y := point.Y
