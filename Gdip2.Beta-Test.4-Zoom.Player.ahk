@@ -36,7 +36,6 @@ brush1 := new gdip.Brush(119, 0, 0, 0)
 iconCross := icons.Bitmap["cross"].Resize(0.2)
 iconArrowDown := icons.Bitmap["arrow-down"].Resize(0.4)
 iconArrowUp := icons.Bitmap["arrow-up"].Resize(0.4)
-iconZoomIn := icons.Bitmap["zoom-in"]
 iconZoomIn := icons.Bitmap["zoom-in"].Resize(0.7)
 iconZoomOut := icons.Bitmap["zoom-out"].Resize(0.7)
 
