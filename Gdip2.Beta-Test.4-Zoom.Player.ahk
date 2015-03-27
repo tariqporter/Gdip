@@ -27,7 +27,7 @@ loop % fishCount
 fishZip.Files := array
 
 bitmap1 := gdip.BitmapFromZip(fishZip, 1)
-UnScaledSize := new gdip.Size(bitmap1.Width, bitmap1.Height)
+UnScaledSize := bitmap1.Size
 bitmap1.Dispose()
 
 point1 := new gdip.Point(0, 0)
