@@ -1059,33 +1059,17 @@ class Gdip
 		
 		;2
 		;bitmap,point
-		;bitmap,opacity
-		;bitmap,matrix
 		;pGraphics,bitmap
 		
 		;3
-		;bitmap,point,opacity
-		;bitmap,point,matrix
 		;bitmap,point,size
-		;pGraphics,bitmap,opacity
-		;pGraphics,bitmap,matrix
 		;pGraphics,bitmap,point
 		
 		;4
-		;bitmap,point,size,opacity
-		;bitmap,point,size,matrix
-		;pGraphics,bitmap,point,opacity
-		;pGraphics,bitmap,point,matrix
 		;pGraphics,bitmap,point, size
 		
 		;5
 		;bitmap,point,size,point,size
-		;pGraphics,bitmap,point,size,opacity
-		;pGraphics,bitmap,point,size,matrix
-		
-		;6
-		;bitmap,point,size,point,size,opacity
-		;bitmap,point,size,point,size,matrix
 		DrawImage(params*)
 		{
 			c := params.MaxIndex()
@@ -1093,122 +1077,43 @@ class Gdip
 			if (c = 1)
 			{
 				bitmap := params[1]
-				E := this._DrawImage(this.pGraphics, bitmap.Pointer, 0, 0, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, 0)
+				E := this._DrawImage(this.pGraphics, bitmap.Pointer, 0, 0, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttributes)
 			}
 			else if (c = 2)
 			{
-				;bitmap, point
-				if (params[2].__Class = "Gdip.Point")
+				if (params[1].__Class = "Gdip.Bitmap")
 				{
 					bitmap := params[1]
-					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, 0)
+					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttributes)
 				}
-				;bitmap,opacity
-				;bitmap,matrix
-				else if (params[1].__Class = "Gdip.Bitmap")
-				{
-					bitmap := params[1]
-					matrix := (params[2] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[2],0],[0,0,0,0,1]] : params[2]
-					imageAttr := this.SetImageAttributesColorMatrix(matrix)
-					E := this._DrawImage(this.pGraphics, bitmap.Pointer, 0, 0, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, imageAttr)
-					this.DisposeImageAttributes(imageAttr)
-				}
-				;pGraphics,bitmap
 				else
 				{
 					bitmap := params[2]
-					E := this._DrawImage(params[1], bitmap.Pointer, 0, 0, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, 0)
+					E := this._DrawImage(params[1], bitmap.Pointer, params[2].X, params[2].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttributes)
 				}
 			}
 			else if (c = 3)
 			{
-				;bitmap,point,size
-				if (params[3].__Class = "Gdip.Size")
+				if (params[1].__Class = "Gdip.Bitmap")
 				{
 					bitmap := params[1]
-					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, 0, 0, bitmap.Width, bitmap.Height, 0)
+					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttributes)
 				}
-				;bitmap,point,opacity
-				;bitmap,point,matrix
-				else if (params[1].__Class = "Gdip.Bitmap")
-				{
-					bitmap := params[1]
-					matrix := (params[3] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[3],0],[0,0,0,0,1]] : params[3]
-					imageAttr := this.SetImageAttributesColorMatrix(matrix)
-					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, imageAttr)
-					this.DisposeImageAttributes(imageAttr)
-				}
-				;pGraphics,bitmap,point
-				else if (params[3].__Class = "Gdip.Point")
-				{
-					bitmap := params[2]
-					E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, 0)
-				}
-				;pGraphics,bitmap,opacity
-				;pGraphics,bitmap,matrix
 				else
 				{
 					bitmap := params[2]
-					matrix := (params[3] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[3],0],[0,0,0,0,1]] : params[3]
-					imageAttr := this.SetImageAttributesColorMatrix(matrix)
-					E := this._DrawImage(params[1], bitmap.Pointer, 0, 0, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, imageAttr)
-					this.DisposeImageAttributes(imageAttr)
+					E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttributes)
 				}
 			}
 			else if (c = 4)
 			{
-				;bitmap,point,size,opacity
-				;bitmap,point,size,matrix
-				if (params[1].__Class = "Gdip.Bitmap")
-				{
-					bitmap := params[1]
-					matrix := (params[4] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[4],0],[0,0,0,0,1]] : params[4]
-					imageAttr := this.SetImageAttributesColorMatrix(matrix)
-					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, 0, 0, bitmap.Width, bitmap.Height, imageAttr)
-					this.DisposeImageAttributes(imageAttr)
-				}
-				;pGraphics,bitmap,point, size
-				else if (params[4].__Class = "Gdip.Size")
-				{
-					bitmap := params[2]
-					E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, params[4].Width, params[4].Height, 0, 0, bitmap.Width, bitmap.Height, 0)
-				}
-				;pGraphics, bitmap,point,opacity
-				;pGraphics, bitmap,point,matrix
-				else
-				{
-					bitmap := params[2]
-					matrix := (params[4] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[4],0],[0,0,0,0,1]] : params[4]
-					imageAttr := this.SetImageAttributesColorMatrix(matrix)
-					E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, imageAttr)
-					this.DisposeImageAttributes(imageAttr)
-				}
+				bitmap := params[2]
+				E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, params[4].Width, params[4].Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttributes)
 			}
 			else if (c = 5)
 			{
-				;bitmap,point,size,point,size
-				if (params[1].__Class = "Gdip.Bitmap")
-				{
-					E := this._DrawImage(this.pGraphics, params[1].Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, params[4].X, params[4].Y, params[5].Width, params[5].Height, 0)
-				}
-				;pGraphics,bitmap,point,size,opacity
-				;pGraphics,bitmap,point,size,matrix
-				else
-				{
-					bitmap := params[2]
-					matrix := (params[5] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[5],0],[0,0,0,0,1]] : params[5]
-					imageAttr := this.SetImageAttributesColorMatrix(matrix)
-					E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, params[4].Width, params[4].Height, 0, 0, bitmap.Width, bitmap.Height, imageAttr)
-					this.DisposeImageAttributes(imageAttr)
-				}
-			}
-			else if (c = 6)
-			{
-				;bitmap,point,size,point,size,opacity
-				;bitmap,point,size,point,size,matrix
-				matrix := (params[5] + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,params[5],0],[0,0,0,0,1]] : params[5]
-				imageAttr := this.SetImageAttributesColorMatrix(matrix)
-				E := this._DrawImage(this.pGraphics, params[1].Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, params[4].X, params[4].Y, params[5].Width, params[5].Height, imageAttr)
+				bitmap := params[1]
+				E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, params[4].X, params[4].Y, params[5].Width, params[5].Height, bitmap.ImageAttributes)
 			}
 			else
 				throw "Incorrect number of parameters for Object.DrawImage()"
