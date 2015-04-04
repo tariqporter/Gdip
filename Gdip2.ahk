@@ -230,12 +230,27 @@ class Gdip
 							break
 						}
 					}
-					
+
 					if (!otherHit)
 					{
+						if (shape != this.hoverShape)
+						{
+							shape2 := this.hoverShape
+							if (IsObject(shape2.hoverOut))
+								hoverOutFn := shape2.hoverOut.function, hoverOutParams := shape2.hoverOut.parameters
+							else
+								hoverOutFn := shape2.hoverOut, hoverOutParams := {}
+								
+							if (IsFunc(hoverOutFn))
+							{
+								hoverOutFn.(shape2, { x: mx - this.X - shape2.X, y: my - this.Y - shap2e.Y }, hoverOutParams)
+							}
+							this.hoverShape := shape
+						}
+					
 						lButton := GetKeyState("LButton")
 						this.hoverShape := shape
-						
+						;tooltip, % shape.Shape
 						if (lButton && shape.click = "Drag")
 						{
 							this.Drag()
@@ -263,24 +278,20 @@ class Gdip
 						}
 					}
 				}
-				else if (this.hoverShape = shape)
+				else if (shape = this.hoverShape)
 				{
-					;MsgBox, here 1
-					;MsgBox, % shape.Shape "`n" shape.hoverOut.function
-					this.hoverShape := 0
 					if (IsObject(shape.hoverOut))
 						hoverOutFn := shape.hoverOut.function, hoverOutParams := shape.hoverOut.parameters
 					else
 						hoverOutFn := shape.hoverOut, hoverOutParams := {}
-					
+						
 					if (IsFunc(hoverOutFn))
 					{
-						;MsgBox, here 
 						hoverOutFn.(shape, { x: mx - this.X - shape.X, y: my - this.Y - shape.Y }, hoverOutParams)
 					}
+					this.hoverShape := 0
 				}
 			}
-			
 			this.X := point.X
 			this.Y := point.Y
 			this.Point := new Gdip.Point(point.X, point.Y)
@@ -420,10 +431,56 @@ class Gdip
 			this.Width := this.GetImageWidth(this.Pointer)
 			this.Height := this.GetImageHeight(this.Pointer)
 			this.Size := new Gdip.Size(this.Width, this.Height)
-			this.Opacity := 1
+			this._opacity := 1
+			this._matrix := [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,this._opacity,0],[0,0,0,0,1]]
+			this._imageAttr := obj.SetImageAttributesColorMatrix(this._matrix)
 		}
 		
-		_pointer := null
+		Opacity[]
+		{
+			get {
+				return this._opacity
+			}
+			set {
+				this._opacity := value
+				;obj := new Gdip.Object()
+				if (this._matrix)
+				{
+					;MsgBox, here 1
+					;this._matrix := [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,value,0],[0,0,0,0,1]]
+					matrix := this._matrix
+					;MsgBox, % matrix[4, 4]
+					matrix[4, 4] := this._opacity
+					;MsgBox, % matrix[4, 4]
+					this._matrix := matrix
+					this.ImageAttr := this._matrix
+					;obj.SetImageAttributesColorMatrix(this._matrix)
+				}
+				else
+				{
+					;MsgBox, % this._opacity
+					this._matrix := [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,this._opacity,0],[0,0,0,0,1]]
+					this.ImageAttr := this._matrix
+					;this.ImageAttr :=  obj.SetImageAttributesColorMatrix(this._matrix)
+				}
+			}
+		}
+		
+		ImageAttr[]
+		{
+			get {
+				return this._imageAttr
+			}
+			set {
+				this._matrix := value
+				;Tooltip, % this._matrix[4, 4]
+				obj := new Gdip.Object()
+				;matrix := (matrix + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,matrix,0],[0,0,0,0,1]] : matrix
+				this._imageAttr := obj.SetImageAttributesColorMatrix(this._matrix)
+			}
+		}
+		
+		_pointer := 0
 		Pointer[]
 		{
 			get {
@@ -467,6 +524,12 @@ class Gdip
 		{
 			this.DisposeImage(this.Pointer)
 			this.Pointer := ""
+
+			if (this.ImageAttr)
+			{
+				obj := new Gdip.Object()
+				obj.DisposeImageAttributes(this.ImageAttr)
+			}
 		}
 		
 		DisposeImage(pBitmap)
@@ -684,20 +747,26 @@ class Gdip
 			}
 			else
 				throw "Incorrect number of parameters for Bitmap.Resize()"
-				
+			
+			matrix := this._matrix
+			imageAttr := this._imageAttr
+			this.ImageAttr := [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,1,0],[0,0,0,0,1]]
 			pBitmap := this.CreateBitmap(size.Width, size.Height)
 			pGraphics := this.GraphicsFromImage(pBitmap)
 			obj := new Gdip.Object()
-			E := obj._DrawImage(pGraphics, this.Pointer, 0, 0, size.Width, size.Height, 0, 0, this.Width, this.Height, 0)
+			E := obj.DrawImage(pGraphics, this, new Gdip.Point(0, 0), size)
 			this.DisposeImage(this.Pointer)
 			this.DeleteGraphics(pGraphics)
 			this.Pointer := pBitmap
 			this.Size := size
 			this.Width := size.Width
 			this.Height := size.Height
+			this._imageAttr := imageAttr
+			this._matrix := matrix
 			return this
 		}
 		
+		/*
 		ApplyColorMatrix(matrix)
 		{
 			pBitmap := this.CreateBitmap(this.Width, this.Height)
@@ -712,6 +781,7 @@ class Gdip
 			this.Pointer := pBitmap
 			return this
 		}
+		*/
 		
 		GetImageWidth(pBitmap)
 		{
@@ -740,18 +810,19 @@ class Gdip
 				this.BorderWidth := params[4]
 				this.Brush := params[5]
 				this.Border := params[6]
-				this.Opacity := params[7] ? params[7] : 1
+				;this.ImagAttr := params[7] ? params[7] : 1
 			}
 			else if (shape = "Image")
 			{
 				this.Shape := shape
-				this._Bitmap := params[1]
+				this._bitmap := params[1]
 				this.Point := params[2]
-				this.Size := this._Bitmap.Size
+				this.Size := this._bitmap.Size
 				this.AnimateSize := this.Size
 				this.AnimateWidth := this.AnimateSize.Width
 				this.AnimateHeight := this.AnimateSize.Height
-				this.Opacity := this._Bitmap.Opacity
+				this._imageAttr := this._bitmap.ImageAttr
+				this._opacity  := this._bitmap.Opacity
 			}
 			else
 				throw "Unrecognized shape in Shape.New - " shape
@@ -763,18 +834,78 @@ class Gdip
 			this.Animating := false
 		}
 		
+		Opacity[]
+		{
+			get {
+				return this._opacity
+			}
+			set {
+				this._bitmap.Opacity := 0.2
+				this._opacity := 0.2
+				;MsgBox, % this._opacity
+			}
+		}
+		
+		ImageAttr[]
+		{
+			get {
+				return this._imageAttr
+			}
+			set {
+				this.Bitmap.ImageAttr := value
+				;MsgBox, % value
+				this._imageAttr := this.Bitmap.ImageAttr
+			}
+		}
+		
 		Bitmap[]
 		{
 			get {
-				return this._Bitmap
+				return this._bitmap
 			}
 			set {
-				this._Bitmap := value
-				this.Size := this._Bitmap.Size
+				;matrix := this._bitmap._matrix
+				;opacity := this.Bitmap.Opacity
+				;imageAttr := this._bitmap._imageAttr
+				
+				;bitmap1 := value
+				
+				;if (this._bitmap._opacity != 1)
+				;		MsgBox, % this._bitmap._opacity
+				;Tooltip, % this._bitmap._opacity
+				
+				;Tooltip, % opacity
+				
+				;this._bitmap._matrix := matrix
+				;this.Bitmap.Opacity := opacity
+				;Tooltip, % this._bitmap._opacity "`n" opacity
+				;this._bitmap._imageAttr := _imageAttr
+				
+				;this._bitmap.ImageAttr := imageAttr
+				;this.Size := this.bitmap1.Size
+				;this.AnimateSize := this.Size
+				;this.AnimateWidth := this.AnimateSize.Width
+				;this.AnimateHeight := this.AnimateSize.Height
+				
+				;this._imageAttr := bitmap1.ImageAttr
+				;this._opacity := bitmap1.Opacity
+				
+				this._bitmap := value
+				;this.Point := params[2]
+				this.Size := this._bitmap.Size
 				this.AnimateSize := this.Size
 				this.AnimateWidth := this.AnimateSize.Width
 				this.AnimateHeight := this.AnimateSize.Height
-				return this._Bitmap
+				;this._imageAttr := this._bitmap.ImageAttr
+				;this._opacity  := this._bitmap.Opacity
+				;this._opacity := 0.2
+				;this._bitmap.Opacity := 0.2
+				
+				;this._imageAttr := this._bitmap.ImagAttr
+				;this._opacity := this._bitmap.Opacity
+				;if (this._opacity != 1)
+				;	Msgbox, % this._opacity
+				;Tooltip, % this._opacity
 			}
 		}
 		
@@ -1073,23 +1204,24 @@ class Gdip
 		DrawImage(params*)
 		{
 			c := params.MaxIndex()
+			;Tooltip, % c
 			;bitmap
 			if (c = 1)
 			{
 				bitmap := params[1]
-				E := this._DrawImage(this.pGraphics, bitmap.Pointer, 0, 0, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttributes)
+				E := this._DrawImage(this.pGraphics, bitmap.Pointer, 0, 0, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttr)
 			}
 			else if (c = 2)
 			{
 				if (params[1].__Class = "Gdip.Bitmap")
 				{
 					bitmap := params[1]
-					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttributes)
+					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttr)
 				}
 				else
 				{
 					bitmap := params[2]
-					E := this._DrawImage(params[1], bitmap.Pointer, params[2].X, params[2].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttributes)
+					E := this._DrawImage(params[1], bitmap.Pointer, params[2].X, params[2].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttr)
 				}
 			}
 			else if (c = 3)
@@ -1097,23 +1229,27 @@ class Gdip
 				if (params[1].__Class = "Gdip.Bitmap")
 				{
 					bitmap := params[1]
-					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttributes)
+					;MsgBox, % bitmap.ImageAttributes
+					;imageAttr := this.SetImageAttributesColorMatrix([[-1,0,0,0,0],[0,-1,0,0,0],[0,0,-1,0,0],[0,0,0,1,0],[1,1,1,0,1]])
+					;MsgBox, % bitmap.ImageAttributes
+					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttr)
+					;this.DisposeImageAttributes(imageAttr)
 				}
 				else
 				{
 					bitmap := params[2]
-					E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttributes)
+					E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, bitmap.Width, bitmap.Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttr)
 				}
 			}
 			else if (c = 4)
 			{
 				bitmap := params[2]
-				E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, params[4].Width, params[4].Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttributes)
+				E := this._DrawImage(params[1], bitmap.Pointer, params[3].X, params[3].Y, params[4].Width, params[4].Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttr)
 			}
 			else if (c = 5)
 			{
 				bitmap := params[1]
-				E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, params[4].X, params[4].Y, params[5].Width, params[5].Height, bitmap.ImageAttributes)
+				E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, params[4].X, params[4].Y, params[5].Width, params[5].Height, bitmap.ImageAttr)
 			}
 			else
 				throw "Incorrect number of parameters for Object.DrawImage()"
@@ -1122,6 +1258,7 @@ class Gdip
 		
 		_DrawImage(pGraphics, pBitmap, dx, dy, dw, dh, sx, sy, sw, sh, imageAttr=0)
 		{
+			;MsGBox, % imageAttr
 			E := DllCall("gdiplus\GdipDrawImageRectRect", "uptr", pGraphics, "uptr", pBitmap
 						, "float", dx, "float", dy, "float", dw, "float", dh
 						, "float", sx, "float", sy, "float", sw, "float", sh
@@ -1137,6 +1274,7 @@ class Gdip
 				i := A_Index
 				loop 5
 				{
+					;MsGbox, % matrix[i, A_Index]
 					NumPut(matrix[i, A_Index], colorMatrix, ((i - 1) * 20) + ((A_Index - 1) * 4), "float")
 				}
 			}
@@ -1148,6 +1286,7 @@ class Gdip
 		
 		DisposeImageAttributes(imageAttr)
 		{
+			;MsgBox, here 99
 			return DllCall("gdiplus\GdipDisposeImageAttributes", "uptr", imageAttr)
 		}
 		
@@ -1185,7 +1324,8 @@ class Gdip
 				;params2.Point := 
 				
 				;bitmap,point,size,point,size,matrix
-				E := this.DrawImage(shape.Bitmap, shape.Point, shape.AnimateSize, new Gdip.Point(0, 0), shape.Size)
+				;MsgBox, % shape.Bitmap.ImageAttributes
+				E := this.DrawImage(shape.Bitmap, shape.Point, shape.AnimateSize)
 			}
 			else
 				throw "Unrecognized shape in Object.DrawShape - " shape.Shape
