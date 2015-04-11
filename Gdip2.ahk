@@ -95,14 +95,70 @@ class Gdip
 		}
 	}
 	
+	class Pen
+	{
+		;ARGB, w
+		;R, G, B, w
+		;A, R, G, B, w
+		__New(params*)
+		{
+			c := params.MaxIndex()
+			if (c = 2)
+			{
+				ARGB := params[1]
+				width := params[2]
+			}
+			else if (c = 4)
+			{
+				ARGB := (255 << 24) | (params[1] << 16) | (params[2] << 8) | params[3]
+				width := params[4]
+			}
+			else if (c = 5)
+			{
+				ARGB := (params[1] << 24) | (params[2] << 16) | (params[3] << 8) | params[4]
+				width := params[5]
+			}
+			else
+				throw "Incorrect number of parameters for Pen.New()"
+			this.Pointer := this.CreatePen(ARGB, width)
+			this.Width := width
+		}
+		
+		__Delete()
+		{
+			this.Dispose()
+		}
+		
+		Dispose()
+		{
+			return DllCall("gdiplus\GdipDeletePen", "uptr", this.Pointer)
+		}
+		
+		CreatePen(ARGB, w)
+		{
+		   DllCall("gdiplus\GdipCreatePen1", "UInt", ARGB, "float", w, "int", 2, "uptr*", pPen)
+		   return pPen
+		}
+	}
+	
 	class Point
 	{
-		X := null
-		Y := null
-		__New(x, y)
+		__New(params*)
 		{
-			this.X := x
-			this.Y := y
+			c := params.MaxIndex()
+			if (c = 2)
+			{
+				this.X := params[1]
+				this.Y := params[2]
+			}
+			else if (c = 3)
+			{
+				point1 := params[1]
+				this.X := point1.X + params[2]
+				this.Y := point1.Y + params[3]
+			}
+			else
+				throw "Incorrect number of parameters for Point.New()"
 		}
 	}
 
@@ -123,6 +179,12 @@ class Gdip
 					this.Width := params[1]
 					this.Height := params[2]
 				}
+			}
+			else if (c = 3)
+			{
+				size1 := params[1]
+				this.Width := size1.Width + params[2]
+				this.Height := size1.Height + params[3]
 			}
 			else
 				throw "Incorrect number of parameters for Size.New()"
@@ -173,8 +235,8 @@ class Gdip
 		{
 			CoordMode, Mouse, Screen
 			MouseGetPos,,, win
-			if (win = this.hwnd)
-				PostMessage, 0xA1, 2,,, % "ahk_id " this.hwnd
+			if (!this.hwnd || win = this.hwnd)
+				PostMessage, 0xA1, 2,,, % "ahk_id " win
 		}
 
 		;obj
@@ -212,89 +274,78 @@ class Gdip
 				throw "Incorrect number of parameters for Window.Update()"
 				
 			CoordMode, Mouse, Screen
-			MouseGetPos, mx, my
-			mousePoint := new Gdip.Point(mx, my)
+			;MouseGetPos, mx, my
+			;mousePoint := new Gdip.Point(mx, my)
 
-			for k, shape in obj.Shapes
+			;for k, shape in obj.Shapes
+			;MsgBox, % obj.Shapes.MaxIndex()
+			loop % obj.Shapes.MaxIndex()
 			{
-				if (this.IsHover(mousePoint, shape.Point, shape.Size))
+				k := obj.Shapes.MaxIndex() - A_Index + 1
+				shape := obj.Shapes[k]
+				
+				MouseGetPos, mx, my
+				;Tooltip, % this.X
+				mousePoint := new Gdip.Point(mx, my)
+				
+				WinGetPos, x, y, w, h, % "ahk_id " this.hwnd
+				this.X := x
+				this.Y := y
+				this.Point := new Gdip.Point(x, y)
+				;MsgBox, % shape.shape "`n" shape.width "`n" shape.x "`n" shape.pen.width "`n" (this.IsHover(mousePoint, shape.Point, shape.AnimateSize))
+				if (this.IsHover(mousePoint, shape.Point, shape.AnimateSize))
 				{
-					otherHit := false
-					loop, % obj.Shapes.MaxIndex() - k
+					if (shape != this.hoverShape)
 					{
-						k2 := k + 1
-						shape2 := obj.Shapes[k2]
-						if (shape2 != shape && this.IsHover(mousePoint, shape2.Point, shape2.Size))
+						shape2 := this.hoverShape
+						hoverOutFn := shape2.hoverOut.function
+						if (IsFunc(hoverOutFn))
 						{
-							otherHit := true
-							break
+							event := { x: mx - this.X - shape2.X, y: my - this.Y - shap2e.Y, type: "hoverOut" }
+							hoverOutFn.(shape2, event, shape2.hoverOut.parameters)
+							;if (event.stopPropagation)
+							;	break
 						}
+						;this.hoverShape := shape
 					}
-
-					if (!otherHit)
+					lButton := GetKeyState("LButton")
+					hoverInFn := shape.hoverIn.function
+					clickFn := shape.click.function
+					;MsgBox, % clickFn.name
+					if (lButton && IsFunc(clickFn))
 					{
-						if (shape != this.hoverShape)
-						{
-							shape2 := this.hoverShape
-							if (IsObject(shape2.hoverOut))
-								hoverOutFn := shape2.hoverOut.function, hoverOutParams := shape2.hoverOut.parameters
-							else
-								hoverOutFn := shape2.hoverOut, hoverOutParams := {}
-								
-							if (IsFunc(hoverOutFn))
-							{
-								hoverOutFn.(shape2, { x: mx - this.X - shape2.X, y: my - this.Y - shap2e.Y }, hoverOutParams)
-							}
-							this.hoverShape := shape
-						}
-					
-						lButton := GetKeyState("LButton")
-						this.hoverShape := shape
-						;tooltip, % shape.Shape
-						if (lButton && shape.click = "Drag")
-						{
-							this.Drag()
-						}
-						else
-						{
-							if (IsObject(shape.hoverIn))
-								hoverInFn := shape.hoverIn.function, hoverInParams := shape.hoverIn.parameters
-							else
-								hoverInFn := shape.hoverIn, hoverInParams := {}
-								
-							if (IsObject(shape.click))
-								clickFn := shape.click.function, clickParamas := shape.click.parameters
-							else
-								clickFn := shape.click, clickParams := {}
-								
-							if (lButton && IsFunc(clickFn))
-							{
-								clickFn.(shape, { x: mx - this.X - shape.X, y: my - this.Y - shape.Y }, clickParamas)
-							}
-							else if (IsFunc(hoverInFn))
-							{
-								hoverInFn.(shape, { x: mx - this.X - shape.X, y: my - this.Y - shape.Y }, hoverInParams)
-							}
-						}
+						;Tooltip, % shape.Shape
+						event := { x: mx - this.X - shape.X, y: my - this.Y - shape.Y, type: "click" }
+						clickFn.(shape, event, shape.click.parameters)
+						;if (event.stopPropagation)
+						;	break
 					}
+					else if (IsFunc(hoverInFn) && shape != this.hoverShape)
+					{
+						event := { x: mx - this.X - shape.X, y: my - this.Y - shape.Y, type: "hoverIn" }
+						hoverInFn.(shape, event, shape.hoverIn.parameters)
+						;if (event.stopPropagation)
+						;	break
+					}
+					this.hoverShape := shape
+					break
 				}
 				else if (shape = this.hoverShape)
 				{
-					if (IsObject(shape.hoverOut))
-						hoverOutFn := shape.hoverOut.function, hoverOutParams := shape.hoverOut.parameters
-					else
-						hoverOutFn := shape.hoverOut, hoverOutParams := {}
-						
+					hoverOutFn := shape.hoverOut.function
 					if (IsFunc(hoverOutFn))
 					{
-						hoverOutFn.(shape, { x: mx - this.X - shape.X, y: my - this.Y - shape.Y }, hoverOutParams)
+						event := { x: mx - this.X - shape.X, y: my - this.Y - shape.Y, type: "hoverOut" }
+						hoverOutFn.(shape, event, shape.hoverOut.parameters)
+						;if (event.stopPropagation)
+						;	break
 					}
 					this.hoverShape := 0
 				}
 			}
-			this.X := point.X
-			this.Y := point.Y
-			this.Point := new Gdip.Point(point.X, point.Y)
+			;this.X := point.X
+			;this.Y := point.Y
+			;this.Point := new Gdip.Point(point.X, point.Y)
 			this.Width := size.Width
 			this.Height := size.Height
 			this.Size := new Gdip.Size(size.Width, size.Height)
@@ -431,41 +482,58 @@ class Gdip
 			this.Width := this.GetImageWidth(this.Pointer)
 			this.Height := this.GetImageHeight(this.Pointer)
 			this.Size := new Gdip.Size(this.Width, this.Height)
+			this._pointer := 0
 			this._opacity := 1
 			this._matrix := [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,this._opacity,0],[0,0,0,0,1]]
 			this._imageAttr := obj.SetImageAttributesColorMatrix(this._matrix)
 		}
 		
-		Opacity[]
+		Opacity[prm*]
 		{
 			get {
+				if (prm.MaxIndex())
+				{
+					this.Opacity := prm[1]
+					return this
+				}
 				return this._opacity
 			}
 			set {
 				this._opacity := value
-				;obj := new Gdip.Object()
 				if (this._matrix)
 				{
-					;MsgBox, here 1
-					;this._matrix := [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,value,0],[0,0,0,0,1]]
 					matrix := this._matrix
-					;MsgBox, % matrix[4, 4]
 					matrix[4, 4] := this._opacity
-					;MsgBox, % matrix[4, 4]
 					this._matrix := matrix
-					this.ImageAttr := this._matrix
-					;obj.SetImageAttributesColorMatrix(this._matrix)
 				}
 				else
 				{
-					;MsgBox, % this._opacity
 					this._matrix := [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,this._opacity,0],[0,0,0,0,1]]
-					this.ImageAttr := this._matrix
-					;this.ImageAttr :=  obj.SetImageAttributesColorMatrix(this._matrix)
 				}
+				this.ImageAttr := this._matrix
 			}
 		}
 		
+		ImageAttr[prm*]
+		{
+			get {
+				if (prm.MaxIndex())
+				{
+					this.ImageAttr := prm[1]
+					return this
+				}
+				return this._imageAttr
+			}
+			set {
+				this._matrix := value
+				this._opacity := this._matrix[4, 4]
+				obj := new Gdip.Object()
+				obj.DisposeImageAttributes(this._imageAttr)
+				this._imageAttr := obj.SetImageAttributesColorMatrix(this._matrix)
+			}
+		}
+		
+		/*
 		ImageAttr[]
 		{
 			get {
@@ -473,24 +541,24 @@ class Gdip
 			}
 			set {
 				this._matrix := value
-				;Tooltip, % this._matrix[4, 4]
+				this._opacity := this._matrix[4, 4]
 				obj := new Gdip.Object()
-				;matrix := (matrix + 0 >= 0) ? [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,matrix,0],[0,0,0,0,1]] : matrix
+				obj.DisposeImageAttributes(this._imageAttr)
 				this._imageAttr := obj.SetImageAttributesColorMatrix(this._matrix)
 			}
 		}
-		
-		_pointer := 0
+		*/
+
 		Pointer[]
 		{
 			get {
 				return this._pointer
 			}
 			set {
-				this.Width := this.GetImageWidth(value)
-				this.Height := this.GetImageHeight(value)
-				this.Size := new Gdip.Size(this.Width, this.Height)
 				this._pointer := value
+				this.Width := this.GetImageWidth(this._pointer)
+				this.Height := this.GetImageHeight(this._pointer)
+				this.Size := new Gdip.Size(this.Width, this.Height)
 			}
 		}
 		
@@ -523,7 +591,7 @@ class Gdip
 		Dispose()
 		{
 			this.DisposeImage(this.Pointer)
-			this.Pointer := ""
+			this.Pointer := 0
 
 			if (this.ImageAttr)
 			{
@@ -734,36 +802,75 @@ class Gdip
 		
 		;Scale
 		;Width, Height
+		
+		;Scale, ReturnNew
+		;Width,Height,ReturnNew
 		Resize(params*)
 		{
 			c := params.MaxIndex()
 			if (c = 1)
 			{
 				size := new Gdip.Size(this.Size, params[1])
+				dispose := true
 			}
 			else if (c = 2)
 			{
+				if (params[2] = 0)
+				{
+					size := new Gdip.Size(this.Size, params[1])
+					dispose := false
+				}
+				else
+				{
+					size := new Gdip.Size(params[1], params[2])
+					dispose := true
+				}
+			}
+			else if (c = 3)
+			{
 				size := new Gdip.Size(params[1], params[2])
+				dispose := params[3]
 			}
 			else
 				throw "Incorrect number of parameters for Bitmap.Resize()"
 			
+			;obj.DisposeImageAttributes(this._imageAttr)
+			;imageAttr := obj.SetImageAttributesColorMatrix(this._matrix)
+			
+			obj := new Gdip.Object()
+			
 			matrix := this._matrix
-			imageAttr := this._imageAttr
+			;imageAttr := this._imageAttr
+			;imageAttr := obj.SetImageAttributesColorMatrix(matrix)
+			
 			this.ImageAttr := [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,1,0],[0,0,0,0,1]]
 			pBitmap := this.CreateBitmap(size.Width, size.Height)
 			pGraphics := this.GraphicsFromImage(pBitmap)
-			obj := new Gdip.Object()
 			E := obj.DrawImage(pGraphics, this, new Gdip.Point(0, 0), size)
-			this.DisposeImage(this.Pointer)
-			this.DeleteGraphics(pGraphics)
-			this.Pointer := pBitmap
-			this.Size := size
-			this.Width := size.Width
-			this.Height := size.Height
-			this._imageAttr := imageAttr
-			this._matrix := matrix
-			return this
+			
+			if (dispose)
+			{
+				this.DisposeImage(this.Pointer)
+				this.DeleteGraphics(pGraphics)
+				this.Pointer := pBitmap
+				this.Size := size
+				this.Width := size.Width
+				this.Height := size.Height
+				this.ImageAttr := matrix
+				return this
+			}
+			else
+			{
+				bitmap := new Gdip.Bitmap()
+				bitmap.Pointer := pBitmap
+				bitmap.Size := size
+				bitmap.Width := size.Width
+				bitmap.Height := size.Height
+				this.ImageAttr := matrix
+				bitmap.ImageAttr := matrix
+				this.DeleteGraphics(pGraphics)
+				return bitmap
+			}
 		}
 		
 		/*
@@ -796,65 +903,87 @@ class Gdip
 		}
 	}
 	
+	class ShapeCollection
+	{
+		__New()
+		{
+			this.Items := []
+		}
+	}
+	
 	class Shape extends Gdip.Timer
 	{
 		__New(shape, params*)
 		{
-			; rectangle,point,size,radius,borderWidth,fill,border
+			; rectangle,point,size,radius,fill,border
 			if (shape = "Rectangle")
 			{
 				this.Shape := shape
 				this.Point := params[1]
 				this.Size := params[2]
-				this.Radius := params[3] ? params[3] : 0
-				this.BorderWidth := params[4]
-				this.Brush := params[5]
-				this.Border := params[6]
-				;this.ImagAttr := params[7] ? params[7] : 1
+				this.radius := params[3] ? params[3] : 0
+				this.Brush := params[4]
+				this.Pen := params[5]
+				this.AnimateSize := this.Size
 			}
 			else if (shape = "Image")
 			{
 				this.Shape := shape
 				this._bitmap := params[1]
-				this.Point := params[2]
+				;MsgBox, % "here 1: " this._bitmap.Pointer
+				;this.Point := params[2]
+				this.point := params[2]
 				this.Size := this._bitmap.Size
 				this.AnimateSize := this.Size
-				this.AnimateWidth := this.AnimateSize.Width
-				this.AnimateHeight := this.AnimateSize.Height
-				this._imageAttr := this._bitmap.ImageAttr
-				this._opacity  := this._bitmap.Opacity
 			}
 			else
 				throw "Unrecognized shape in Shape.New - " shape
 				
-			this.X := this.Point.X
-			this.Y := this.Point.Y
+			;this.X := this.Point.X
+			;this.Y := this.Point.Y
 			this.Width := this.Size.Width
 			this.Height := this.Size.Height
+			this.AutoDispose := true
 			this.Animating := false
+			
+			this._click := 0
+			this._hoverIn := 0
+			this._hoverOut := 0
+			
+			;MsgBox, % "here 1: " this._bitmap.Pointer
 		}
 		
-		Opacity[]
+		x[]
 		{
 			get {
-				return this._opacity
+				return this._x
 			}
 			set {
-				this._bitmap.Opacity := 0.2
-				this._opacity := 0.2
-				;MsgBox, % this._opacity
+				this._x := value
+				this._point := new Gdip.Point(this._x, this._y)
 			}
 		}
 		
-		ImageAttr[]
+		y[]
 		{
 			get {
-				return this._imageAttr
+				return this._y
 			}
 			set {
-				this.Bitmap.ImageAttr := value
-				;MsgBox, % value
-				this._imageAttr := this.Bitmap.ImageAttr
+				this._y := value
+				this._point := new Gdip.Point(this._x, this._y)
+			}
+		}
+		
+		point[]
+		{
+			get {
+				return this._point
+			}
+			set {
+				this._point := value
+				this._x := this._point.x
+				this._y := this._point.y
 			}
 		}
 		
@@ -864,136 +993,190 @@ class Gdip
 				return this._bitmap
 			}
 			set {
-				;matrix := this._bitmap._matrix
-				;opacity := this.Bitmap.Opacity
-				;imageAttr := this._bitmap._imageAttr
-				
-				;bitmap1 := value
-				
-				;if (this._bitmap._opacity != 1)
-				;		MsgBox, % this._bitmap._opacity
-				;Tooltip, % this._bitmap._opacity
-				
-				;Tooltip, % opacity
-				
-				;this._bitmap._matrix := matrix
-				;this.Bitmap.Opacity := opacity
-				;Tooltip, % this._bitmap._opacity "`n" opacity
-				;this._bitmap._imageAttr := _imageAttr
-				
-				;this._bitmap.ImageAttr := imageAttr
-				;this.Size := this.bitmap1.Size
-				;this.AnimateSize := this.Size
-				;this.AnimateWidth := this.AnimateSize.Width
-				;this.AnimateHeight := this.AnimateSize.Height
-				
-				;this._imageAttr := bitmap1.ImageAttr
-				;this._opacity := bitmap1.Opacity
-				
 				this._bitmap := value
-				;this.Point := params[2]
-				this.Size := this._bitmap.Size
-				this.AnimateSize := this.Size
-				this.AnimateWidth := this.AnimateSize.Width
-				this.AnimateHeight := this.AnimateSize.Height
-				;this._imageAttr := this._bitmap.ImageAttr
-				;this._opacity  := this._bitmap.Opacity
-				;this._opacity := 0.2
-				;this._bitmap.Opacity := 0.2
-				
-				;this._imageAttr := this._bitmap.ImagAttr
-				;this._opacity := this._bitmap.Opacity
-				;if (this._opacity != 1)
-				;	Msgbox, % this._opacity
-				;Tooltip, % this._opacity
 			}
 		}
 		
-		/*
-		SlideUp(interval, animation)
+
+		SetBitmap(bitmap, setImageAttr=1, setAnimateSize=1)
 		{
-			;if (this.Animating)
-			;	this.SetTimer(this._Animate, 0)
-			this.Animating := true
-			animation.animation := "SlideUp"
-			animation.startTick := A_TickCount
-			animation.startHeight := animation.startHeight ? animation.startHeight : this.Height
-			animation.endHeight := animation.endHeight ? animation.endHeight : 0
-			animation.time := animation.time ? animation.time : 500
-			this.SetTimer(this._Animate, interval, animation)
+			;matrix := this._maxtrix
+			;animateSize := this._animateSize
+			this._bitmap := bitmap
+			this.Size := bitmap.Size
+			this.Width := bitmap.Width
+			this.Height := bitmap.Height
+			this.AnimateSize := this.Size
+			;if (setImageAttr)
+			;	this.ImageAttr := matrix
+			;if (setAnimateSize)
+			;	this.AnimateSize := this._bitmap.Size
 		}
 		
-		SlideDown(interval, animation)
+		click[]
 		{
-			;if (this.Animating)
-			;	this.SetTimer(this._Animate, 0)
-			this.Animating := true
-			animation.animation := "SlideDown"
-			animation.startTick := A_TickCount
-			animation.startHeight := animation.startHeight ? animation.startHeight : this.Height
-			animation.time := animation.time ? animation.time : 500
-			this.SetTimer(this._Animate, interval, animation)
+			get {
+				return this._click
+			}
+			set {
+				if (IsObject(value))
+					this._click := value
+				else
+				{
+					if (value = "Drag")
+						this._click := { function: Gdip.Window.Drag, parameters: 0 }
+					else
+						this._click := { function: value, parameters: 0 }
+				}
+			}
 		}
-		*/
 		
-		Animate(interval, a)
+		hoverIn[]
+		{
+			get {
+				return this._hoverIn
+			}
+			set {
+				if (IsObject(value))
+					this._hoverIn := value
+				else
+					this._hoverIn := { function: value, parameters: 0 }
+			}
+		}
+		
+		hoverOut[]
+		{
+			get {
+				return this._hoverOut
+			}
+			set {
+				if (IsObject(value))
+					this._hoverOut := value
+				else
+					this._hoverOut := { function: value, parameters: 0 }
+			}
+		}
+		
+		AnimateSize[]
+		{
+			get {
+				return this._animateSize
+			}
+			set {
+				this._animateSize := value
+				this._animateWidth := this._animateSize.Width
+				this._animateHeight := this._animateSize.Height
+			}
+		}
+		
+		AnimateWidth[]
+		{
+			get {
+				return this._animateWidth
+			}
+			set {
+				this._animateWidth := value
+				this._animateSize := new Gdip.Size(this._animateWidth, this._animateHeight)
+			}
+		}
+		
+		AnimateHeight[]
+		{
+			get {
+				return this._animateHeight
+			}
+			set {
+				this._animateHeight := value
+				this._animateSize := new Gdip.Size(this._animateWidth, this._animateHeight)
+			}
+		}
+		
+		Opacity[]
+		{
+			get {
+				return this._bitmap.Opacity
+			}
+			set {
+				this._bitmap.Opacity := value
+			}
+		}
+		
+		ImageAttr[]
+		{
+			get {
+				return this._bitmap.ImageAttr
+			}
+			set {
+				this._bitmap.ImageAttr := value
+			}
+		}
+
+		slideUp(interval, animation)
+		{
+			animation.startTick := A_TickCount
+			animation.toHeight := 0
+			aniamtion.fromHeight := this.Height
+			this.Animate(interval, animation)
+		}
+		
+		slideDown(interval, animation)
+		{
+			animation.startTick := A_TickCount
+			animation.fromHeight := 0
+			animation.toHeight := this.Height
+			this.Animate(interval, animation)
+		}
+		
+		Animate(interval, animation=0)
 		{
 			this.Animating := true
-			a.startTick := A_TickCount
-			a.time := 500
-			a.fromX := this.X
-			a.fromY := this.Y
-			a.toX := this.X
-			a.toY := this.Y
-			a.fromWidth := this.Width
-			a.fromHeight := this.Height
-			a.toWidth := this.Width
-			a.toHeight := this.Height
-			a.fromOpacity := this.Opacity
+			
+			default := {}
+			default.startTick := A_TickCount
+			default.time := 500
+			default.fromX := this.X
+			default.x := this.X
+			default.fromY := this.Y
+			default.y := this.Y
+			default.fromWidth := this.AnimateWidth
+			default.width := this.Width
+			default.fromHeight := this.AnimateHeight
+			default.height := this.Height
+			default.fromOpacity := this.Opacity
+			default.opacity := this.Opacity
+			
+			for k, v in animation
+			{
+				default[k] := v
+			}
+			this.SetTimer(this._Animate, interval, default)
 		}
 		
 		_Animate(params)
 		{
 			static i = 0
 			for k, v in params
-			{
 				%k% := v
-				;MsgBox, % k
-			}
-			;Tooltip, % i++
+			fr := (A_TickCount - startTick >= time && this.Animating) ? 1 : (A_TickCount - startTick) / time
+			fr := fr * 90
+			fraction := Sin(fr * 0.01745329252)
 			
-			if (A_TickCount - startTick >= time && this.Animating)
+			if (fromOpacity != opacity)
+				this.Opacity := fromOpacity + (fraction * (opacity - fromOpacity))
+			if (fromHeight != height)
+				this.AnimateHeight := fromHeight + (fraction * (height - fromHeight))
+			if (fromWidth != width)
+				this.AnimateWidth := fromWidth + (fraction * (width - fromWidth))
+			if (fromY != y)
+				this.Y := fromY + (fraction * (y - fromY))
+			if (fromX != x)
+				this.X := fromX + (fraction * (x - fromX))
+				
+			if (fraction = 1)
 			{
-				this.Size.Height := endHeight
-				this.Height := endHeight
 				this.Animating := false
 				this.SetTimer(Func(A_ThisFunc), 0)
-				onComplete.(parameters)
-			}
-			else
-			{
-				fraction := (A_TickCount - startTick) / time
-				;tooltip, % fraction
-				if (animation = "SlideUp")
-				{
-					if (this.Shape = "Rectangle")
-					{
-						currentHeight := startHeight - (fraction * (startHeight - endHeight))
-						this.Size.Height := currentHeight
-						this.Height := currentHeight
-					}
-					else if (this.Shape = "Image")
-					{
-						;MsgBox, here 77
-					}
-				}
-				else if (animation = "SlideDown")
-				{
-					;MsGbox, slide down
-					currentHeight := startHeight + (fraction * (endHeight - startHeight))
-					this.Size.Height := currentHeight
-					this.Height := currentHeight
-				}
+				onComplete.(this, parameters)
 			}
 		}
 	}
@@ -1047,18 +1230,19 @@ class Gdip
 			;MsgBox, % function.Name
 			;function.(this, paramObj)
 			;return this.SetTimer(function, interval, paramObj)
-			this.SetTimer(this.base._DrawFrame, interval, paramObj)
+			this.SetTimer(this._DrawFrame, interval, paramObj)
 		}
 		
-		_DrawFrame(function)
+		_DrawFrame(paramObj)
 		{
 			this.Clear()
+			;MsGBox, here 1
 			this.DrawFrameObj.Function.(this, this.DrawFrameObj.ParamsObj)
 		}
 		
 		StopFrame()
 		{
-			E := this.SetTimer(this.base._DrawFrame)
+			E := this.SetTimer(this._DrawFrame)
 			this.DrawFrameObj := { "Function": 0, "Interval": 0, "ParamsObj": {} }
 			return E
 		}
@@ -1136,6 +1320,53 @@ class Gdip
 		SetSmoothingMode(pGraphics, smoothingMode)
 		{
 			return DllCall("gdiplus\GdipSetSmoothingMode", "uptr", pGraphics, "int", smoothingMode)
+		}
+		
+		;pen, point, size
+		;pGraphics, pen, x, y, w, h
+		DrawRectangle(params*)
+		{
+			c := params.MaxIndex()
+			if (c = 3)
+			{
+				;MsgBox, % this.pGraphics, params[1].Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height
+				E := this._DrawRectangle(this.pGraphics, params[1].Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height)
+			}
+			else if (c = 6)
+			{
+				E := this._DrawRectangle(params[1], params[2], params[3], params[4], params[5], params[6])
+			}
+			else
+				throw "Incorrect number of parameters for Object.DrawRectangle()"
+			return E
+		}
+
+		_DrawRectangle(pGraphics, pPen, x, y, w, h)
+		{
+			return DllCall("gdiplus\GdipDrawRectangle", "uptr", pGraphics, "uptr", pPen, "float", x, "float", y, "float", w, "float", h)
+		}
+		
+		;pen, point, size
+		;pGraphics, pen, x, y, w, h
+		DrawEllipse(params*)
+		{
+			c := params.MaxIndex()
+			if (c = 3)
+			{
+				E := this._DrawEllipse(this.pGraphics, params[1].Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height)
+			}
+			else if (c = 6)
+			{
+				E := this._DrawEllipse(params[1], params[2], params[3], params[4], params[5], params[6])
+			}
+			else
+				throw "Incorrect number of parameters for Object.DrawEllipse()"
+			return E
+		}
+		
+		_DrawEllipse(pGraphics, pPen, x, y, w, h)
+		{
+			return DllCall("gdiplus\GdipDrawEllipse", "uptr", pGraphics, "uptr", pPen, "float", x, "float", y, "float", w, "float", h)
 		}
 		
 		;brush, point, size
@@ -1232,6 +1463,8 @@ class Gdip
 					;MsgBox, % bitmap.ImageAttributes
 					;imageAttr := this.SetImageAttributesColorMatrix([[-1,0,0,0,0],[0,-1,0,0,0],[0,0,-1,0,0],[0,0,0,1,0],[1,1,1,0,1]])
 					;MsgBox, % bitmap.ImageAttributes
+					;if (params[3].Height != 13)
+					;	Tooltip, % params[3].Height
 					E := this._DrawImage(this.pGraphics, bitmap.Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, 0, 0, bitmap.Width, bitmap.Height, bitmap.ImageAttr)
 					;this.DisposeImageAttributes(imageAttr)
 				}
@@ -1290,41 +1523,59 @@ class Gdip
 			return DllCall("gdiplus\GdipDisposeImageAttributes", "uptr", imageAttr)
 		}
 		
+		DrawShapeCollection(shapeCollection)
+		{
+			for k, v in shapeCollection.Items
+			{
+				this.DrawShape(v)
+			}
+		}
+		
 		DrawShape(shape)
 		{
 			if (shape.Shape = "Rectangle")
 			{
-				;MsgBox, % shape.Brush "`n" shape.Point.X "`n" shape.Size.W "`n" shape.Radius
-				if (shape.Radius = 0)
-					E := this.FillRectangle(shape.Brush, shape.Point, shape.Size)
+				if (shape.radius = 0)
+				{
+					if (shape.Pen)
+					{
+						p1 := shape.Point
+						as := shape.AnimateSize
+						pen1 := shape.Pen
+						E1 := this.DrawRectangle(pen1, p1, as)
+						E2 := this.FillRectangle(shape.Brush, new Gdip.Point(p1.X + pen1.Width / 2, p1.Y + pen1.Width / 2), new Gdip.Size(as.Width - pen1.Width, as.Height - pen1.Width))
+						E := E1 | E2
+					}
+					else
+					{
+						;Tooltip, here 1
+						E := this.FillRectangle(shape.Brush, shape.Point, shape.AnimateSize)
+					}
+				}
 				else
-					E := this.FillRoundedRectangle(shape.Brush, shape.Point, shape.Size, shape.Radius)
+				{
+					
+					if (shape.Pen)
+					{
+						p1 := shape.Point
+						as := shape.AnimateSize
+						pen1 := shape.Pen
+						r := shape.radius
+						E1 := this.DrawRoundedRectangle(pen1, p1, as, shape.radius)
+						E2 := this.FillRoundedRectangle(shape.Brush, new Gdip.Point(p1.X + pen1.Width, p1.Y + pen1.Width), new Gdip.Size(as.Width - 2 * pen1.Width, as.Height - 2 * pen1.Width), shape.radius - pen1.Width)
+						;E2 := this.FillRectangle(shape.Brush, new Gdip.Point(p1.X + pen1.Width + r, p1.Y + pen1.Width), new Gdip.Size(as.Width - 2 * pen1.Width - 2 * r, as.Height - 2 * pen1.Width))
+						E := E1 | E2
+					}
+					else
+					{
+						;MsGbox, % shape.Point.X
+						E := this.FillRoundedRectangle(shape.Brush, shape.Point, shape.AnimateSize, shape.radius)
+					}
+				}
 			}
 			else if (shape.Shape = "Image")
 			{
-				;MsgBox, % this.Shapes.MaxIndex()
-				
-				/*
-				for k, v in params
-				{
-					if (v.__Class = "Gdip.Point")
-					{
-						shape.Point := v
-						shape.X := v.X
-						shape.Y := v.Y
-						params.Remove(k)
-					}
-				}
-
-				params.Insert(1, shape.Bitmap)
-				params.Insert(2, shape.Point)
-				*/
-				
-				;params2 := { 1: shape.Bitmap }
-				;params2.Point := 
-				
-				;bitmap,point,size,point,size,matrix
-				;MsgBox, % shape.Bitmap.ImageAttributes
+				;MsgBox, % shape.Bitmap.Pointer "`n" shape.Point.x "`n" shape.AnimateSize.width
 				E := this.DrawImage(shape.Bitmap, shape.Point, shape.AnimateSize)
 			}
 			else
@@ -1365,6 +1616,58 @@ class Gdip
 			this.AddPathPie(path1, x, y+h-(2*r), 2*r, 2*r, 90, 90)
 			this.AddPathPie(path1, x+w-(2*r), y+h-(2*r), 2*r, 2*r, 0, 90)
 			this.FillPath(pGraphics, pBrush, path1)
+			this.DeletePath(path1)
+			return r
+		}
+		
+		;pen, point, size, r
+		;pGraphics, pen, x, y, w, h, r
+		DrawRoundedRectangle(params*)
+		{
+			c := params.MaxIndex()
+			if (c = 4)
+			{
+				pen1 := params[1]
+				;MsGBox, % pen1.Width
+				E := this._DrawRoundedRectangle(this.pGraphics, pen1.Pointer, params[2].X, params[2].Y, params[3].Width, params[3].Height, params[4], pen1.Width)
+			}
+			else if (c = 7)
+			{
+				pen1 := params[2]
+				E := this._DrawRoundedRectangle(params[1], pen1.Pointer, params[3], params[4], params[5], params[6], params[7], pen1.Width)
+			}
+			else
+				throw "Incorrect number of parameters for Object.DrawRoundedRectangle()"
+			return E
+		}
+		
+		_DrawRoundedRectangle(pGraphics, pPen, x, y, w, h, r, penWidth)
+		{
+			pw := penWidth / 2
+			
+			;r := (w <= h) ? (r < w / 2) ? r : w / 2 : (r < h / 2) ? r : h / 2
+			
+			if (w <= h && (r + pw > w / 2))
+			{
+				r := (w / 2 > pw) ? w / 2 - pw : 0
+			}
+			else if (r + pw > h / 2)
+			{
+				r := (h / 2 > pw) ? h / 2 - pw : 0
+			}
+			r2 := r * 2
+			
+			path1 := this.CreatePath(0)
+			this.AddPathArc(path1, x + pw, y + pw, r2, r2, 180, 90)
+			this.AddPathLine(path1, x + pw + r, y + pw, x + w - r - pw, y + pw)
+			this.AddPathArc(path1, x + w - r2 - pw, y + pw, r2, r2, 270, 90)
+			this.AddPathLine(path1, x + w - pw, y + r + pw, x + w - pw, y + h - r - pw)
+			this.AddPathArc(path1, x + w - r2 - pw, y + h - r2 - pw, r2, r2, 0, 90)
+			this.AddPathLine(path1, x + w - r - pw, y + h - pw, x + r + pw, y + h - pw)
+			this.AddPathArc(path1, x + pw, y + h - r2 - pw, r2, r2, 90, 90)
+			this.AddPathLine(path1, x + pw, y + h - r - pw, x + pw, y + r + pw)
+			this.ClosePathFigure(path1)
+			this.DrawPath(pGraphics, pPen, path1)
 			this.DeletePath(path1)
 			return r
 		}
@@ -1424,6 +1727,11 @@ class Gdip
 			return DllCall("gdiplus\GdipFillPath", "uptr", pGraphics, "uptr", pBrush, "uptr", path)
 		}
 		
+		DrawPath(pGraphics, pPen, path)
+		{
+			return DllCall("gdiplus\GdipDrawPath", "uptr", pGraphics, "uptr", pPen, "uptr", path)
+		}
+		
 		; Alternate = 0
 		; Winding = 1
 		CreatePath(brushMode=0)
@@ -1435,6 +1743,11 @@ class Gdip
 		DeletePath(path)
 		{
 			return DllCall("gdiplus\GdipDeletePath", "uptr", path)
+		}
+		
+		ClosePathFigure(path)
+		{
+			return DllCall("gdiplus\GdipClosePathFigure", "uptr", path)
 		}
 		
 		AddPathRectangle(path, x, y, w, h)
@@ -1457,9 +1770,10 @@ class Gdip
 			return DllCall("gdiplus\GdipAddPathPie", "uptr", path, "float", x, "float", y, "float", w, "float", h, "float", startAngle, "float", sweepAngle)
 		}
 		
-;GpStatus WINGDIPAPI GdipAddPathPie(GpPath *path, REAL x, REAL y, REAL width, REAL height, REAL startAngle, REAL sweepAngle)		
-		
-;GpStatus WINGDIPAPI GdipAddPathArc(GpPath *path, REAL x, REAL y, REAL width, REAL height, REAL startAngle, REAL sweepAngle)
+		AddPathLine(path, x1, y1, x2, y2)
+		{
+			return DllCall("gdiplus\GdipAddPathLine", "uptr", path, "float", x1, "float", y1, "float", x2, "float", y2)
+		}
 		
 		CreateRegion()
 		{
@@ -1486,45 +1800,55 @@ class Gdip
 	
 	class Timer 
 	{
-		SetTimer(function, period=0, paramObject=0, priority=0) 
-		{ 
-			Static tmrs := []
-
-			If IsFunc(function)
+		SetTimer(function, interval=0, paramObj=0)
+		{
+			static timers := {}, i := 0
+			for k, v in timers
 			{
-				if IsObject(tmr := tmrs[this])
+				if (v.toDelete)
 				{
-					ret := DllCall( "KillTimer", "uptr", 0, "uptr", tmr.tmr)
-					;tmr.Running := false
-					E := DllCall("GlobalFree", "UInt", tmr.CBA)
-					ObjRemove(tmrs, this)
-					if (period = 0 || period = "off")
-						return ret
+					timers.Remove(v.reference)
 				}
-				;if (period = 20)
-				;	MsGbox, % function.Name "`n" IsObject(paramObject)
-				
-				tmr := tmrs[this] := { "func": function, "ref": this, "period": (period = "on") ? 250 : period, "Priority": priority
-				, "OneTime": (period < 0), "params": IsObject(paramObject) ? paramObject: [], "Tick": A_TickCount }
-				tmr.CBA := RegisterCallback(A_ThisFunc, "F", 4, &tmr)
-				return !!(tmr.tmr := DllCall("SetTimer", "UInt",0, "UInt",0, "UInt", (period && period != "On") ? Abs(period) : (period := 250), "UInt", tmr.CBA))
 			}
 			
-			if IsObject(tmr := Object(A_EventInfo))
+			if (IsFunc(function))
 			{
-				DllCall("KillTimer", "UInt",0, "UInt", tmr.tmr)
-				tmr.tick := ErrorLevel := A_TickCount
-				func := tmr.func
-				%func%(tmr.ref,tmr.params)
-				
-				if (tmr.OneTime)
+				if (IsObject(timers[this]))
 				{
-					E := DllCall("GlobalFree", "UInt", tmr.CBA)
-					ObjRemove(tmrs, tmr.ref ? tmr.ref: tmr.func)
+					timer := timers[this]
+					E := DllCall("KillTimer", "uptr", 0, "uptr", timer.timer)
+					DllCall("GlobalFree", "ptr", timer.callBack)
+					timer.toDelete := true
+					this.SetTimer(function, interval, paramObj)
 					return E
 				}
-				tmr.tmr := DllCall("SetTimer", "UInt",0, "UInt",0, "UInt",((A_TickCount-tmr.Tick) > tmr.period) ? 0 : (tmr.period - (A_TickCount - tmr.Tick)), "UInt", tmr.CBA)
+				else
+				{
+					timer := { function: function, reference: this, interval: interval, paramObj: paramObj, tick: A_TickCount, toDelete: false }
+					callBack := RegisterCallback(A_ThisFunc, "", "", &timer)
+					T := DllCall("SetTimer", "uptr", 0, "uptr", 0, "uint", interval, "uptr", callBack)
+					timer.timer := T
+					timer.callBack := callBack
+					timers[this] := timer
+					return T
+				}
 			}
-		}
+			else
+			{
+				if (IsObject(timer := Object(A_EventInfo)))
+				{
+					E := DllCall("KillTimer", "uptr", 0, "uptr", timer.timer)
+					func := timer.function
+					func.(timer.reference, timer.paramObj)
+
+					tick := ((A_TickCount - timer.tick) > timer.interval) ? 0 : timer.interval - (A_TickCount - timer.tick)
+					T := DllCall("SetTimer", "uptr", 0, "uptr", 0, "uint", tickl, "uptr", timer.callBack)
+					timer.timer := T
+					return T
+				}
+				else
+					throw "Unrecognized timer in Timer.SetTimer"
+			}
+		}			
 	}
 }
