@@ -1,3 +1,4 @@
+;DOM style shapes
 class Gdip
 {
 	__New()
