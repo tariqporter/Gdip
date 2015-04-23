@@ -25,7 +25,7 @@ class Gdip
 	Dispose()
 	{
 		DllCall("gdiplus\GdiplusShutdown", "uptr", this.pToken)
-		if hModule := DllCall("GetModuleHandle", "str", "gdiplus")
+		if (hModule := DllCall("GetModuleHandle", "str", "gdiplus"))
 			DllCall("FreeLibrary", "uptr", hModule)
 			
 		Gdip.__New := this._New
@@ -1325,7 +1325,7 @@ class Gdip
 			if (radius)
 			{
 				E1 := this.DrawRoundedRectangle(pen1, p1, s1, radius)
-				if (radius < pWidth / 2)
+				if (radius <= pWidth / 2)
 				{
 					E2 := this.FillRectangle(shape.brush, new Gdip.Point(p1, pWidth, pWidth), new Gdip.Size(s1.width - pWidth * 2, s1.height - pWidth * 2))
 				}
