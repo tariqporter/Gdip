@@ -20,10 +20,10 @@ Update(win, p)
 	if (A_TickCount - p.tick > p.time)
 	{
 		p.tick := A_TickCount, p.on := !p.on
-		cssObj := { "border-color":{A:200, R:200, G:150, B:30}, "border-width":50, "border-radius": 10 }
-		win.shapeMatch(p.on ? "#square1" : "#square2").css(cssObj)
-		cssObj := { "border-color":{A:200, R:50, G:150, B:130}, "border-width":20, "border-radius": 0 }
-		win.shapeMatch(p.on ? "#square2" : "#square1").css(cssObj)
+		css := { "border-color":{A:200, R:200, G:150, B:30}, "border-width":50, "border-radius": 10 }
+		win.shapeMatch(p.on ? "#square1" : "#square2").css(css)
+		css := { "border-color":{A:200, R:50, G:150, B:130}, "border-width":20, "border-radius": 0 }
+		win.shapeMatch(p.on ? "#square2" : "#square1").css(css)
 	}
 }
 
