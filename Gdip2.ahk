@@ -106,9 +106,11 @@ class Gdip
 			{
 				ARGB := params[1]
 				width := params[2]
+				;MsgBox, % ARGB "`n" width
 			}
 			else if (c = 4)
 			{
+				;MsgBox, % params[1] "`n" params[2] "`n" params[3] "`n" params[4]
 				ARGB := (255 << 24) | (params[1] << 16) | (params[2] << 8) | params[3]
 				width := params[4]
 			}
@@ -135,8 +137,17 @@ class Gdip
 		
 		CreatePen(ARGB, w)
 		{
-		   DllCall("gdiplus\GdipCreatePen1", "UInt", ARGB, "float", w, "int", 2, "uptr*", pPen)
-		   return pPen
+			;MsgBox, % ARGB "`n" w
+			
+			;A := (0xff000000 & ARGB) >> 24
+			;R := (0x00ff0000 & ARGB) >> 16
+			;G := (0x0000ff00 & ARGB) >> 8
+			;B := 0x000000ff & ARGB
+			
+			;MsgBox, % A "`n" R "`n" G "`n" B "`n" w
+	
+			DllCall("gdiplus\GdipCreatePen1", "UInt", ARGB, "float", w, "int", 2, "uptr*", pPen)
+			return pPen
 		}
 	}
 	
@@ -220,14 +231,11 @@ class Gdip
 			this.size := new Gdip.Size(size.width, size.height)
 			this.alpha := 255
 			this.obj := new Gdip.Object(this.size)
-			this._shapes := {}
 			this.mainLoopObj := { "function": 0, "interval": 0 }
-			
-			chars1 := ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","0","1","2","3","4","5","6","7","8","9","-","_"]
-			this.whiteSpace := {" ":1,"\t":1}
-			this.chars := {}
-			loop % chars1.MaxIndex()
-				this.chars.Insert(chars1[A_Index], 1)
+				
+			this._shapes := {}
+			this._css := {}
+			this._styleSheetClass := new Gdip.StyleSheet()
 		}
 		
 		x[]
@@ -264,13 +272,659 @@ class Gdip
 			}
 		}
 		
+		_shapeIsMatch(selector, ms)
+		{
+			match := true
+			if (ms.id && !selector.id) || (ms.id && selector.id && ms.id != selector.id)
+			{
+				;E := 1
+				match := false
+			}
+			else if (!ms.id || selector.id = ms.id)
+			{
+				;E := 3
+				for k, v in ms.classList
+				{
+					if (!(selector.classList.HasKey(k)))
+					{
+						match := false
+						break
+					}
+				}
+			}
+			else
+			{
+				;E := 4
+				throw "Bad +selector for Window._shapeIsMatch()"
+			}
+			return match
+		}
+		
+		_parseSelector(selector)
+		{
+			return this._styleSheetClass._parseSelector(selector)
+		}
+		
+		_matchInnerShapes(shape, ms, matchItems)
+		{
+			loop % shape._shapes.MaxIndex()
+			{
+				shape1 := shape._shapes[A_Index]
+				match := this._shapeIsMatch(shape1.selector, ms)
+				if (match)
+				{
+					matchItems.Insert(shape1)
+				}
+				this._matchInnerShapes(shape1, ms, matchItems)
+			}
+			
+		}
+		
+		shapeMatch(selector)
+		{
+			;io := IsObject(selector)
+			if (IsObject(selector))
+			{
+				matchSelector := {}
+				matchSelector.Insert(selector)
+			}
+			else
+			{
+				selector := Trim(RegExReplace(selector, "i)\s+", " "))
+				arr := StrSplit(selector, " ")
+				matchSelector := []
+				loop % arr.MaxIndex()
+				{
+					ms1 := this._parseSelector(arr[A_Index])
+					matchSelector.Insert(ms1)
+				}
+			}
+			
+			i := 1
+			matchItems := {}
+			ms1 := matchSelector[i]
+			loop % this._shapes.MaxIndex()
+			{
+				shape1 := this._shapes[A_Index]
+				match := this._shapeIsMatch(shape1.selector, ms1)
+				if (match)
+					matchItems.Insert(shape1)
+				this._matchInnerShapes(shape1, ms1, matchItems)
+			}
+			
+			loop % matchSelector.MaxIndex() - 1
+			{
+				matchItems2 := {}
+				ms1 := matchSelector[++i]
+				loop % matchItems.MaxIndex()
+				{
+					shape2 := matchItems[A_Index]
+					this._matchInnerShapes(shape2, ms1, matchItems2)
+				}
+				matchItems := matchItems2
+			}
+
+			sc1 := new Gdip.ShapeCollection()
+			sc1.items := matchItems
+			sc1._css := this._css
+			return sc1
+		}
+		
+		shapeInsert(selector, css=0)
+		{
+			shape := new Gdip.Shape(selector, css)
+			this._shapes.Insert(shape)
+			loop % this._css.MaxIndex()
+			{
+				cssItem1 := this._css[A_Index]
+				match1 := this._shapeIsMatch(shape.selector, cssItem1.selector)
+				if (match1)
+					shape.styleInsert(cssItem1)
+			}
+			shape._css := this._css
+			return shape
+		}
+		
+		styleSheetInsert(css)
+		{
+			loop % css.items.MaxIndex()
+			{
+				cssItem1 := css.items[A_Index]
+				this._css.Insert(cssItem1)
+				shapes := this.shapeMatch(cssItem1)
+				shapes.styleInsert(cssItem1)
+			}
+		}
+		
+		MainLoop(function, interval, paramObj=0)
+		{
+			function := Func(function)
+			this.mainLoopObj := { "function": function, "interval": interval, "parameters": paramObj }
+			this.SetTimer(this._Update, interval)
+		}
+		
+		_Update(paramObj=0)
+		{
+			this.mainLoopObj.function.(this, this.mainLoopObj.parameters)
+			this.Update(paramObj)
+		}
+		
+		_drawInnerShapes(shape)
+		{
+			loop % shape._shapes.MaxIndex()
+			{
+				shape1 := shape._shapes[A_Index]
+				this.obj.DrawShape(shape1)
+				;MsgBox, % "here 2:" shape1.selector.id "`n" shape1._shapes.MaxIndex() "`n" shape1.left
+				if (shape1._shapes.MaxIndex())
+					this._drawInnerShapes(shape1)
+			}
+		}
+		
+		Update(paramObj=0)
+		{
+			if (paramObj.x != "")
+				this.point.x := paramObj.x
+			if (paramObj.y != "")
+				this.point.y := paramObj.y
+			
+			this.obj.Clear()
+
+			loop % this._shapes.MaxIndex()
+			{
+				shape1 := this._shapes[A_Index]
+				;MsgBox, % "here 1:" shape1.selector.id "`n" shape1._shapes.MaxIndex() "`n" shape1.left
+				this.obj.DrawShape(shape1)
+				;MsgBox, % shape1.selector.id
+				this._drawInnerShapes(shape1)
+			}
+			return this.UpdateLayeredWindow(this.hwnd, this.obj.hdc, this.x, this.y, this.width, this.height, this.alpha)
+		}
+		
+		UpdateLayeredWindow(hwnd, hdc, x="", y="", w="", h="", alpha=255)
+		{
+			if ((x != "") && (y != ""))
+				VarSetCapacity(pt, 8), NumPut(x, pt, 0, "uint"), NumPut(y, pt, 4, "uint")
+
+			if ((w = "") || (h = ""))
+				WinGetPos,,, w, h, ahk_id %hwnd%
+				
+			return DllCall("UpdateLayeredWindow", "uptr", hwnd, "uptr", 0, "uptr", ((x = "") && (y = "")) ? 0 : &pt, "int64*", w|h<<32, "uptr", hdc, "int64*", 0, "uint", 0, "uint*", alpha<<16|1<<24, "uint", 2)
+		}
+	}
+	
+	class ShapeCollection
+	{
+		__New(params*)
+		{
+			c := params.MaxIndex()
+			if (!c)
+			{
+			}
+			else if (c = 1)
+			{
+				this.items.Insert(params[1])
+			}
+			else
+				throw "Incorrect number of parameters for ShapeCollection.New()"
+				
+			this.items := {}
+			this._windowClass := new Gdip.Window()
+			/*
+			this.mousemove := { "function": 0, "parameters": 0 }
+			this.mouseenter := { "function": 0, "parameters": 0 }
+			this.mouseleave := { "function": 0, "parameters": 0 }
+			this.click := { "function": 0, "parameters": 0 }
+			this.mousedown := { "function": 0, "parameters": 0 }
+			this.mouseup := { "function": 0, "parameters": 0 }
+			*/
+		}
+		
+		; selectorObj
+		styleInsert(style)
+		{
+			loop % this.items.MaxIndex()
+			{
+				this.items[A_Index].styleInsert(style)
+			}
+			return this
+		}
+		
+		addClass(class)
+		{
+			loop % this.items.MaxIndex()
+			{
+				shape := this.items[A_Index]
+				shape.addClass(class)
+				loop % this._css.MaxIndex()
+				{
+					cssItem1 := this._css[A_Index]
+					match1 := this._windowClass._shapeIsMatch(shape.selector, cssItem1.selector)
+					if (match1)
+						shape.styleInsert(cssItem1)
+				}
+			}
+			return this
+		}
+		
+		removeClass(class)
+		{
+			loop % this.items.MaxIndex()
+			{
+				shape := this.items[A_Index]
+				shape.removeClass(class)
+				loop % this._css.MaxIndex()
+				{
+					cssItem1 := this._css[A_Index]
+					match1 := this._windowClass._shapeIsMatch(shape.selector, cssItem1.selector)
+					if (match1)
+						shape.styleInsert(cssItem1)
+				}
+			}
+			return this
+		}
+		
+		toggleClass(class)
+		{
+			loop % this.items.MaxIndex()
+			{
+				shape := this.items[A_Index]
+				if (shape.HasClass(class))
+					shape.removeClass(class)
+				else
+					shape.addClass(class)
+				loop % this._css.MaxIndex()
+				{
+					cssItem1 := this._css[A_Index]
+					match1 := this._windowClass._shapeIsMatch(shape.selector, cssItem1.selector)
+					if (match1)
+						shape.styleInsert(cssItem1)
+				}
+			}
+			return this
+		}
+		
+		css(params*)
+		{
+			loop % this.items.MaxIndex()
+			{
+				this.items[A_Index].css(params*)
+			}
+			return this
+		}
+	}
+
+	class Shape extends Gdip.Timer
+	{
+		static mapping := { "position":"position", "left":"left", "top":"top", "width":"width", "height":"height", "background-color":"backgroundColor", "border-radius":"borderRadius", "border-color":"borderColor", "border-width":"borderWidth" }
+		static defaults := [  ["position","relative"], ["left","0px"], ["top","0px"], ["width","0px"], ["height","0px"], ["background-color","#000"], ["border-radius","0px"], ["border-color","#000"], ["border-width","0px"] ]
+		__New(selector=0, css=0)
+		{
+			this.style := { css: {}, me: {} }
+			this.style.me := css
+			params := []
+			loop % this.defaults.MaxIndex()
+			{
+				i := this.defaults[A_Index]
+				params.Insert([ i[1], css.HasKey(i[1]) ? css[i[1]] : i[2] ])
+			}
+			
+			this._styleSheetClass := new Gdip.StyleSheet()
+			if (selector)
+			{
+				s1 := this._styleSheetClass._parseSelector(selector)
+				this.selector := s1
+			}
+			else
+				this.selector := { id: 0, classList: [], class: "", classCount: 0 }
+			this.css(params)
+			this._shapes := {}
+			this._windowClass := new Gdip.Window()
+		}
+		
+		hasClass(class)
+		{
+			class := Trim(class)
+			return this.selector.classList.HasKey(class)
+		}
+		
+		addClass(class)
+		{
+			class := Trim(class)
+			if (!this.hasClass(class))
+			{
+				this.selector.classList.Insert(class, class)
+				this.selector.class .= class " "
+				this.selector.classCount++
+			}
+		}
+		
+		removeClass(class)
+		{
+			class := Trim(class)
+			if (this.hasClass(class))
+			{
+				this.selector.classList.Remove(class)
+				classes := " "
+				for k, v in this.selector.classList
+					classes .= v " "
+				this.selector.class := classes
+				this.selector.classCount--
+			}
+		}
+		
+		styleInsert(style)
+		{
+			s1 := style.selector
+			inserted := false
+			loop % this.style.css.MaxIndex()
+			{
+				s2 := this.style.css[A_Index].selector
+				if ((s1.id && !s2.id) || (s1.id = s2.id && s1.classCount >= s2.classCount))
+				{
+					this.style.css.Insert(A_Index, style)
+					inserted := true
+					break
+				}
+			}
+			if (!inserted)
+				this.style.css.Insert(style)
+			
+			styles := {}
+			loop % this.style.css.MaxIndex()
+			{
+				i := this.style.css.MaxIndex() - A_Index + 1
+				style2 := this.style.css[i].style
+				for k, v in style2
+				{
+					styles[k] :=  v
+				}
+			}
+			
+			for k, v in this.style.me
+			{
+				styles[k] := v
+			}
+			
+			loop % this.defaults.MaxIndex()
+			{
+				i := this.defaults[A_Index]
+				if (!styles.HasKey(i[1]))
+				{
+					styles[i[1]] := i[2]
+				}
+			}
+			this.css(styles)
+		}
+		
+		_parseLength(length)
+		{
+			if (length = 0)
+				match1 := 0
+			else
+				pos1 := RegExMatch(length, "i)(\d*\.*\d+)\s*px", match)
+			return match1
+		}
+		
+		left[]
+		{
+			get {
+				return this._left
+			}
+			set {
+				pLength := this._parseLength(value)
+				if (pLength != "")
+					this._left := pLength
+				return this._left
+			}
+		}
+		
+		top[]
+		{
+			get {
+				return this._top
+			}
+			set {
+				pLength := this._parseLength(value)
+				if (pLength != "")
+					this._top := pLength
+				return this._top
+			}
+		}
+		
+		width[]
+		{
+			get {
+				return this._width
+			}
+			set {
+				pLength := this._parseLength(value)
+				if (pLength != "")
+					this._width := pLength
+				return this._width
+			}
+		}
+		
+		height[]
+		{
+			get {
+				return this._height
+			}
+			set {
+				pLength := this._parseLength(value)
+				if (pLength != "")
+					this._height := pLength
+				return this._height
+			}
+		}
+		
+		borderRadius[]
+		{
+			get {
+				return this._borderRadius
+			}
+			set {
+				pLength := this._parseLength(value)
+				if (pLength != "")
+					this._borderRadius := pLength
+				return this._borderRadius
+			}
+		}
+		
+		backgroundColor[]
+		{
+			get {
+				return this._backgroundColor
+			}
+			set {
+				this._backgroundColor := value
+				this.brush := value
+				return this._backgroundColor
+			}
+		}
+		
+		borderColor[]
+		{
+			get {
+				return this._borderColor
+			}
+			set {
+				this._borderColor := value
+				this.pen := { "borderColor": value, "borderWidth": this.borderWidth "px" }
+				return this._borderColor
+			}
+		}
+		
+		borderWidth[]
+		{
+			get {
+				return this._borderWidth
+			}
+			set {
+				this.pen := { "borderColor": this.borderColor, "borderWidth": value }
+				return this._borderWidth
+			}
+		}
+		
+		_parseColor(color)
+		{
+			pos1 := RegExMatch(color, "i)#([\da-f]+)", match)
+			if (pos1)
+			{
+				m := "0x" match1
+				if (m <= 0xffffff)
+				{
+					m := (0xffffffff << 24) | m
+				}
+			}
+			else if (pos1 := RegExMatch(color, "i)rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", match))
+			{
+				m := (255 << 24) | (match1 << 16) | (match2 << 8) | match3
+			}
+			else if (pos1 := RegExMatch(color, "i)rgba\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d*\.*\d+)\s*\)", match))
+			{
+				A := match4 * 255
+				m := (A << 24) | (match1 << 16) | (match2 << 8) | match3
+			}
+			return m
+		}
+		
+		brush[]
+		{
+			get {
+				return this._brush
+			}
+			set {
+				color := value
+				pColor := this._parseColor(color)
+				if (pColor)
+					this._brush := new Gdip.Brush(pColor)
+				return this._brush
+			}
+		}
+		
+		pen[]
+		{
+			get {
+				return this._pen
+			}
+			set {
+				bw := this._parseLength(value.borderWidth)
+				if (bw > 0)
+				{
+					bw := (this.height >= this.width) ? ((bw > this.width / 2) ? this.width / 2 : bw) : ((bw > this.height / 2) ? this.height / 2 : bw)
+					color := value.borderColor
+					pColor := this._parseColor(color)
+					this._pen := new Gdip.Pen(pColor, bw)
+				}
+				else
+				{
+					this._pen := { width: 0 }
+				}
+				return this._pen
+			}
+		}
+		
+		shapeInsert(selector, css=0)
+		{
+			shape := new Gdip.Shape(selector, css)
+			this._shapes.Insert(shape)
+			loop % this._css.MaxIndex()
+			{
+				cssItem1 := this._css[A_Index]
+				match1 := this._windowClass._shapeIsMatch(shape.selector, cssItem1.selector)
+				if (match1)
+					shape.styleInsert(cssItem1)
+			}
+			shape._css := this._css
+			return shape
+		}
+		
+		css(params*)
+		{
+			c := params.MaxIndex()
+			if (c = 1)
+			{
+				paramObj := params[1]
+				if (paramObj.MaxIndex())
+				{
+					loop % paramObj.MaxIndex()
+					{
+						i := paramObj[A_Index]
+						this[this.mapping[i[1]]] := i[2]
+					}
+				}
+				else
+				{
+					loop % this.defaults.MaxIndex()
+					{
+						i := this.defaults[A_Index]
+						if (paramObj.HasKey(i[1]))
+							this[this.mapping[i[1]]] := paramObj[i[1]]
+					}
+				}
+			}
+			else if (c = 2)
+			{
+				this[this.mapping[params[1]]] := params[2]
+			}
+			else
+				throw "Incorrect number of parameters for Shape.css()"
+		}
+	}
+	
+	class StyleSheet
+	{
+		__New(params*)
+		{
+			this.items := {}
+			chars1 := ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","0","1","2","3","4","5","6","7","8","9","-","_"]
+			this.whiteSpace := {" ":1,"\t":1}
+			this.chars := {}
+			loop % chars1.MaxIndex()
+				this.chars.Insert(chars1[A_Index], 1)
+				
+			c := params.MaxIndex()
+			if (!c)
+			{
+			}
+			else if (Mod(c, 2))
+			{
+				throw "Incorrect number of arguments in StyleSheet.New"
+			}
+			else
+			{
+				loop % params.MaxIndex() / 2
+				{
+					i := A_Index * 2 - 1
+					if !(IsObject(style := params[i + 1]))
+					{
+						throw "Bad style in StyleSheet.New"
+					}
+					this.items.Insert({ selector: this._parseSelector(params[i]), style: style })
+				}
+			}
+		}
+		
+		/*
+		_getClass(selector)
+		{
+			classList := selector.classList
+			classes := " "
+			for k, v in classList
+				classes .= v " "
+			return classes
+		}
+		*/
+		
 		_parseSelector(selector)
 		{
 			inID := false
 			inClass := false
 			id1 := id2 := ""
-			class1 := ""
+			class1 := "", class2 := " "
 			classes := []
+			classCount := 0
 			loop % StrLen(selector)
 			{
 				chr := SubStr(selector, A_Index, 1)
@@ -292,137 +946,50 @@ class Gdip
 						inClass := true
 					}
 					else
-						throw "Bad id in window._parseSelector"
+						throw "Bad id in StyleSheet._parseSelector"
 				}
 				else if (inClass)
 				{
 					if (this.chars.HasKey(chr))
+					{
 						class1 .= chr
+					}
 					else if (this.whiteSpace.HasKey(chr))
 					{
 						classes.Insert(class1, class1)
+						classCount++
+						;MsgBox, % "here 1: "class1
+						class2 .= class1 " "
 						class1 := ""
 						inClass := false
 					}
 					else if (chr = ".")
 					{
 						classes.Insert(class1, class1)
+						classCount++
+						;MsgBox, % "here 2: "class1
+						class2 .= class1 " "
 						class1 := ""
 						;inClass := true
 					}
 					else
-						throw "Bad class in window._parseSelector"
+						throw "Bad class in StyleSheet._parseSelector"
 				}
 				else if (chr = "#")
 					inID := true
 				else if (chr = ".")
 					inClass := true
 			}
+			;MsgBox, % class1
 			if (class1)
+			{
 				classes.Insert(class1, class1)
+				classCount++
+				class2 .= class1 " "
+			}
 			if (id1)
 				id2 := id1
-			return { id: id2, class: classes }
-		}
-		
-		shapeInsert(id, shape)
-		{
-			s1 := this._parseSelector(id)
-			this._shapes.Insert({ id: s1.id, class: s1.class, shape: shape })
-		}
-		
-		_shapeIsMatch(shape, ms)
-		{
-			if (!shape.id && ms.id)
-				return false
-			else if ((!ms.id) || (shape.id = ms.id))
-			{
-				for k, v in ms.class
-				{
-					if (!(shape.class.HasKey(k)))
-						return false
-				}
-				return true
-			}
-			return false
-		}
-		
-		shapeMatch(selector)
-		{
-			selector := Trim(RegExReplace(selector, "i)\s+", " "))
-			arr := StrSplit(selector, " ")
-			matchSelector := []
-			loop % arr.MaxIndex()
-			{
-				s1 := this._parseSelector(arr[A_Index])
-				matchSelector.Insert(s1)
-			}
-			
-			;matchShapes := {}
-			shapeCollection := new Gdip.ShapeCollection()
-			loop % matchSelector.MaxIndex()
-			{
-				ms := matchSelector[A_Index]
-				loop % this._shapes.MaxIndex()
-				{
-					shape1 := this._shapes[A_Index]
-					match := this._shapeIsMatch(shape1, ms)
-					if (match)
-						shapeCollection.items.Insert(shape1.shape)
-						;matchShapes.Insert(shape1.shape)
-				}
-			}
-			return shapeCollection
-		}
-		
-		MainLoop(function, interval, paramObj=0)
-		{
-			function := Func(function)
-			this.mainLoopObj := { "function": function, "interval": interval, "parameters": paramObj }
-			this.SetTimer(this._Update, interval)
-		}
-		
-		_Update(paramObj=0)
-		{
-			this.mainLoopObj.function.(this, this.mainLoopObj.parameters)
-			this.Update(paramObj)
-		}
-		
-		Update(paramObj=0)
-		{
-			if (paramObj.x != "")
-				this.point.x := paramObj.x
-			if (paramObj.y != "")
-				this.point.y := paramObj.y
-			
-			this.obj.Clear()
-			
-			;MsgBox, % this.MaxIndex()
-			
-			for k, v in this._shapes
-			{
-				;MsgBox, % k
-				this.obj.DrawShape(v.shape)
-			}
-			
-			
-			;loop % this.MaxIndex()
-			;{
-			;	this.obj.DrawShape(this[A_Index])
-			;}
-			
-			return this.UpdateLayeredWindow(this.hwnd, this.obj.hdc, this.x, this.y, this.width, this.height, this.alpha)
-		}
-		
-		UpdateLayeredWindow(hwnd, hdc, x="", y="", w="", h="", alpha=255)
-		{
-			if ((x != "") && (y != ""))
-				VarSetCapacity(pt, 8), NumPut(x, pt, 0, "uint"), NumPut(y, pt, 4, "uint")
-
-			if ((w = "") || (h = ""))
-				WinGetPos,,, w, h, ahk_id %hwnd%
-				
-			return DllCall("UpdateLayeredWindow", "uptr", hwnd, "uptr", 0, "uptr", ((x = "") && (y = "")) ? 0 : &pt, "int64*", w|h<<32, "uptr", hdc, "int64*", 0, "uint", 0, "uint*", alpha<<16|1<<24, "uint", 2)
+			return { id: id2, classList: classes, class: class2, classCount: classCount }
 		}
 	}
 	
@@ -852,147 +1419,6 @@ class Gdip
 			return height
 		}
 	}
-	
-	class ShapeCollection
-	{
-		items := {}
-		__New(shape)
-		{
-			this.items.Insert(shape)
-		}
-		
-		css(params*)
-		{
-			loop % this.items.MaxIndex()
-			{
-				this.items[A_Index].css(params*)
-			}
-		}
-	}
-
-	class Shape extends Gdip.Timer
-	{
-		static mapping := { "x":"x", "y":"y", "width":"width", "height":"height", "background-color":"backgroundColor", "border-radius":"borderRadius", "border-color":"borderColor", "border-width":"borderWidth" }
-		static defaults := [  ["x",0], ["y",0], ["width",0], ["height",0], ["background-color",0xff000000], ["border-radius",0], ["border-color",0xffffffff], ["border-width",0] ]
-		__New(paramObj)
-		{
-			params := []
-			loop % this.defaults.MaxIndex()
-			{
-				i := this.defaults[A_Index]
-				params.Insert([i[1], (paramObj[i[1]] = "") ? i[2] : paramObj[i[1]]])
-			}
-			
-			this.css(params)
-			this.shapes := {}
-		}
-		
-		backgroundColor[]
-		{
-			get {
-				return this._backgroundColor
-			}
-			set {
-				this._backgroundColor := value
-				this.brush := value
-				return this._backgroundColor
-			}
-		}
-		
-		borderColor[]
-		{
-			get {
-				return this._borderColor
-			}
-			set {
-				this._borderColor := value
-				this.pen := { "borderColor": value, "borderWidth": this.borderWidth }
-				return this._borderColor
-			}
-		}
-		
-		borderWidth[]
-		{
-			get {
-				return this._borderWidth
-			}
-			set {
-				this._borderWidth := value
-				this.pen := { "borderColor": this.borderColor, "borderWidth": value }
-				return this._borderWidth
-			}
-		}
-		
-		brush[]
-		{
-			get {
-				return this._brush
-			}
-			set {
-				color := value
-				if (IsObject(color))
-				{
-					A := (color.A = "") ? 255 : color.A
-					this._brush := new Gdip.Brush(A, color.R, color.G, color.B)
-				}
-				else
-					this._brush := new Gdip.Brush(value)
-				return this._brush
-			}
-		}
-		
-		pen[]
-		{
-			get {
-				return this._pen
-			}
-			set {
-				bw := value.borderWidth
-				if (bw > 0)
-				{
-					bw := (this.height >= this.width) ? ((bw > this.width / 2) ? this.width / 2 : bw) : ((bw > this.height / 2) ? this.height / 2 : bw)
-					color := value.borderColor
-					A := (color.A = "") ? 255 : color.A
-					this._pen := new Gdip.Pen(A, color.R, color.G, color.B, bw)
-				}
-				else
-				{
-					this._pen := { width: 0 }
-				}
-				return this._pen
-			}
-		}
-		
-		css(params*)
-		{
-			c := params.MaxIndex()
-			if (c = 1)
-			{
-				paramObj := params[1]
-				if (paramObj.MaxIndex())
-				{
-					loop % paramObj.MaxIndex()
-					{
-						i := paramObj[A_Index]
-						this[this.mapping[i[1]]] := i[2]
-					}
-				}
-				else
-				{
-					for k, v in paramObj
-					{
-						this[this.mapping[k]] := v
-					}
-				}
-			}
-			else if (c = 2)
-			{
-				this[this.mapping[params[1]]] := params[2]
-			}
-			else
-				throw "Incorrect number of parameters for Shape.css()"
-		}
-	}
 
 	class Object extends Gdip.Timer
 	{
@@ -1318,10 +1744,12 @@ class Gdip
 		DrawShape(shape)
 		{
 			radius := shape.borderRadius
-			p1 := new Gdip.Point(shape.x, shape.y)
+			p1 := new Gdip.Point(shape.left, shape.top)
 			s1 := new Gdip.Size(shape.width, shape.height)
 			pen1 := shape.pen
 			pWidth := pen1.width
+			;MsgBox, % shape.selector.id "`n"
+			;MsgBox, % shape.selector.id "`n" shape.left "`n" shape.top "`n" shape.width "`n" shape.height "`n" pWidth "`n" radius
 			if (radius)
 			{
 				E1 := this.DrawRoundedRectangle(pen1, p1, s1, radius)
