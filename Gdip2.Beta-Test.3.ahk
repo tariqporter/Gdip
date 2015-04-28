@@ -15,7 +15,7 @@ css := new gdip.StyleSheet(
 	},
 	"#square3", {
 		"top": "200px",
-		"width": "350px",
+		"width": "380px",
 		"height": "110px"
 	},
 	".squares", {
