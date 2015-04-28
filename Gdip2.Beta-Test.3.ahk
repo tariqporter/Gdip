@@ -10,7 +10,7 @@ css := new gdip.StyleSheet(
 (Join
 	"#square2", {
 		"left": "200px",
-		"width": "150px",
+		"width": "180px",
 		"border-color": "rgb(120, 190, 160)"
 	},
 	"#square3", {
@@ -27,7 +27,7 @@ css := new gdip.StyleSheet(
 		"border-color": "#F0A832",
 		"color": "rgba(60,130,20,0.9)",
 		"text-align": "center",
-		"font-size": "40px"
+		"font-size": "30px"
 	},
 	".other-class", {
 		"background-color": "rgba(250, 230, 180, 0.5)"
@@ -44,6 +44,7 @@ css := new gdip.StyleSheet(
 win1.styleSheetInsert(css)
 
 win1.shapeInsert("#square1.squares.other-class").shapeInsert("#square2.squares").shapeInsert("#square3.squares.border-class")
+win1.shapeMatch(".squares").text("Loading...")
 win1.Update({ x: (A_ScreenWidth - win1.width) / 2 - 1200, y: (A_ScreenHeight - win1.height) / 2 })
 win1.MainLoop("Update", 10, { tick: A_TickCount, time: 800 })
 return
