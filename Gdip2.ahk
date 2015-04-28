@@ -201,7 +201,7 @@ class Gdip
 		}
 	}
 	
-	class Window extends Gdip.Timer
+	class Window
 	{
 		__New(params*)
 		{
@@ -370,9 +370,9 @@ class Gdip
 			return sc1
 		}
 		
-		shapeInsert(selector, css=0)
+		shapeInsert(params*)
 		{
-			shape := new Gdip.Shape(selector, css)
+			shape := new Gdip.Shape(params*)
 			this._shapes.Insert(shape)
 			loop % this._css.MaxIndex()
 			{
@@ -400,7 +400,8 @@ class Gdip
 		{
 			function := Func(function)
 			this.mainLoopObj := { "function": function, "interval": interval, "parameters": paramObj }
-			this.SetTimer(this._Update, interval)
+			fn := this._Update.Bind(this, paramObj)
+			SetTimer, % fn, % interval
 		}
 		
 		_Update(paramObj=0)
@@ -415,7 +416,6 @@ class Gdip
 			{
 				shape1 := shape._shapes[A_Index]
 				this.obj.DrawShape(shape1)
-				;MsgBox, % "here 2:" shape1.selector.id "`n" shape1._shapes.MaxIndex() "`n" shape1.left
 				if (shape1._shapes.MaxIndex())
 					this._drawInnerShapes(shape1)
 			}
@@ -433,9 +433,7 @@ class Gdip
 			loop % this._shapes.MaxIndex()
 			{
 				shape1 := this._shapes[A_Index]
-				;MsgBox, % "here 1:" shape1.selector.id "`n" shape1._shapes.MaxIndex() "`n" shape1.left
 				this.obj.DrawShape(shape1)
-				;MsgBox, % shape1.selector.id
 				this._drawInnerShapes(shape1)
 			}
 			return this.UpdateLayeredWindow(this.hwnd, this.obj.hdc, this.x, this.y, this.width, this.height, this.alpha)
@@ -478,6 +476,30 @@ class Gdip
 			this.mousedown := { "function": 0, "parameters": 0 }
 			this.mouseup := { "function": 0, "parameters": 0 }
 			*/
+		}
+		
+		text[prm*]
+		{
+			get {
+				content := ""
+				loop % this.items.MaxIndex()
+				{
+					if (prm.MaxIndex())
+					{
+						this.items[A_Index].text := prm[1]
+					}
+					else
+						content .= this.items[A_Index].text " "
+				}
+				return (prm.MaxIndex()) ? this : content
+			}
+			set {
+				loop % this.items.MaxIndex()
+				{
+					this.items[A_Index].content := value
+				}
+				return this.content
+			}
 		}
 		
 		; selectorObj
@@ -529,23 +551,14 @@ class Gdip
 			loop % this.items.MaxIndex()
 			{
 				shape := this.items[A_Index]
-				if (shape.HasClass(class))
-					shape.removeClass(class)
-				else
-					shape.addClass(class)
-				loop % this._css.MaxIndex()
-				{
-					cssItem1 := this._css[A_Index]
-					match1 := this._windowClass._shapeIsMatch(shape.selector, cssItem1.selector)
-					if (match1)
-						shape.styleInsert(cssItem1)
-				}
+				shape.toggleClass(class)
 			}
 			return this
 		}
 		
 		css(params*)
 		{
+			;MsgBox, % this.items.MaxIndex()
 			loop % this.items.MaxIndex()
 			{
 				this.items[A_Index].css(params*)
@@ -554,33 +567,83 @@ class Gdip
 		}
 	}
 
-	class Shape extends Gdip.Timer
+	class Shape
 	{
-		static mapping := { "position":"position", "left":"left", "top":"top", "width":"width", "height":"height", "background-color":"backgroundColor", "border-radius":"borderRadius", "border-color":"borderColor", "border-width":"borderWidth" }
-		static defaults := [  ["position","relative"], ["left","0px"], ["top","0px"], ["width","0px"], ["height","0px"], ["background-color","#000"], ["border-radius","0px"], ["border-color","#000"], ["border-width","0px"] ]
-		__New(selector=0, css=0)
+		static mapping := { "position":"position", "left":"left", "top":"top", "width":"width", "height":"height", "background-color":"backgroundColor", "border-radius":"borderRadius", "border-color":"borderColor", "border-width":"borderWidth", "color":"color", "text-align":"textAlign", "vertical-align":"verticalAlign", "font-size":"fontSize" }
+		static defaults := [  ["position","relative"], ["left","0px"], ["top","0px"], ["width","0px"], ["height","0px"], ["background-color","#000"], ["border-radius","0px"], ["border-color","#000"], ["border-width","0px"], ["color","#000"], ["text-align","left"], ["vertical-align","middle"], ["font-size","16px"] ]
+		
+		;selector
+		;selector,css
+		;selector,content
+		;selector,css,content
+		__New(params*)
 		{
 			this.style := { css: {}, me: {} }
 			this.style.me := css
-			params := []
+			this._shapes := {}
+			this._windowClass := new Gdip.Window()
+			this.selector := { id: "", classList: {}, class: "", classCount: 0 }
+			this._styleSheetClass := new Gdip.StyleSheet()
+			
+			properties := {}
+			css := {}
+			this.content := ""
+			
+			c := params.MaxIndex()
+			;MsgBox, % params.MaxIndex() "`n" this.content "`n" params[2]
+			if (c = 2)
+			{
+				if (IsObject(params[2]))
+					css := params[2]
+				else
+					this.content := params[2]
+			}
+			else if (c = 3)
+			{
+				css := params[2]
+				this.content := params[3]
+			}
+
 			loop % this.defaults.MaxIndex()
 			{
 				i := this.defaults[A_Index]
-				params.Insert([ i[1], css.HasKey(i[1]) ? css[i[1]] : i[2] ])
+				properties.Insert([ i[1], css.HasKey(i[1]) ? css[i[1]] : i[2] ])
 			}
 			
-			this._styleSheetClass := new Gdip.StyleSheet()
+			selector := params[1]
 			if (selector)
 			{
 				s1 := this._styleSheetClass._parseSelector(selector)
 				this.selector := s1
 			}
-			else
-				this.selector := { id: 0, classList: [], class: "", classCount: 0 }
-			this.css(params)
-			this._shapes := {}
-			this._windowClass := new Gdip.Window()
+			this.css(properties)
+			;MsgBox, % this.content
 		}
+		
+
+		text[prm*]
+		{
+			get {
+				if (prm.MaxIndex())
+				{
+					this.text := prm[1]
+				}
+				return this.content
+			}
+			set {
+				this.content := value
+				return this.content
+			}
+		}
+		
+		/*
+		text(content={})
+		{
+			if (content != 0)
+				this.content := content
+			return this.content
+		}
+		*/
 		
 		hasClass(class)
 		{
@@ -610,6 +673,23 @@ class Gdip
 					classes .= v " "
 				this.selector.class := classes
 				this.selector.classCount--
+			}
+		}
+		
+		toggleClass(class)
+		{
+			class := Trim(class)
+			if (this.hasClass(class))
+				this.removeClass(class)
+			else
+				this.addClass(class)
+				
+			loop % this._css.MaxIndex()
+			{
+				cssItem1 := this._css[A_Index]
+				match1 := this._windowClass._shapeIsMatch(this.selector, cssItem1.selector)
+				if (match1)
+					this.styleInsert(cssItem1)
 			}
 		}
 		
@@ -731,6 +811,18 @@ class Gdip
 			}
 		}
 		
+		color[]
+		{
+			get {
+				return this._color
+			}
+			set {
+				this._color := value
+				this.textBrush := value
+				return this._textBrush
+			}
+		}
+		
 		backgroundColor[]
 		{
 			get {
@@ -789,6 +881,20 @@ class Gdip
 			return m
 		}
 		
+		textBrush[]
+		{
+			get {
+				return this._textBrush
+			}
+			set {
+				color := value
+				pColor := this._parseColor(color)
+				if (pColor)
+					this._textBrush := new Gdip.Brush(pColor)
+				return this._textBrush
+			}
+		}
+		
 		brush[]
 		{
 			get {
@@ -825,9 +931,9 @@ class Gdip
 			}
 		}
 		
-		shapeInsert(selector, css=0)
+		shapeInsert(params*)
 		{
-			shape := new Gdip.Shape(selector, css)
+			shape := new Gdip.Shape(params*)
 			this._shapes.Insert(shape)
 			loop % this._css.MaxIndex()
 			{
@@ -1420,7 +1526,7 @@ class Gdip
 		}
 	}
 
-	class Object extends Gdip.Timer
+	class Object
 	{
 		__New(params*)
 		{
@@ -1545,6 +1651,145 @@ class Gdip
 		SetSmoothingMode(pGraphics, smoothingMode)
 		{
 			return DllCall("gdiplus\GdipSetSmoothingMode", "uptr", pGraphics, "int", smoothingMode)
+		}
+		
+		WriteText(content, options=0)
+		{
+			defaults := { font: "Arial", size: 16, style: "Bold", noWrap: false, brush: 0, horizontalAlign: "left", verticalAlign: "middle", rendering: 4, left: 0, top: 0, width: 0, height: 0  }
+			styles := { "Regular": 0, "Bold": 1, "Italic": 2, "BoldItalic": 3, "Underline": 4, "Strikeout": 8 }
+			horizontalAlignments := { "left": 0, "center": 1, "right": 2 }
+			verticalAlignments := { "top": 0, "middle" : 0, "bottom": 0 }
+
+			params := {}
+			for k, v in defaults
+			{
+				params[k] := (options.HasKey(k)) ? options[k] : defaults[k]
+			}
+			if (!styles.HasKey(params.style))
+				throw "Bad style for Object.WriteText() - " params.style
+				
+			params.style := styles[params.style]
+			params.formatStyle := (params.noWrap) ? 0x4000 | 0x1000 : 0x4000
+			
+			if (params.brush.__Class != "Gdip.Brush")
+				throw "Bad brush for Object.WriteText() - " params.brush
+			
+			if (!horizontalAlignments.HasKey(params.horizontalAlign))
+				throw "Bad alignment for Object.WriteText() - " params.horizontalAlign
+			params.horizontalAlign := horizontalAlignments[params.horizontalAlign]
+			
+			if (!verticalAlignments.HasKey(params.verticalAlign))
+				throw "Bad alignment for Object.WriteText() - " params.verticalAlign
+			;params.verticalAlign := verticalAlignments[params.verticalAlign]
+			
+			params.rendering := ((params.rendering >= 0) && (params.rendering <= 5)) ? params.rendering : 4
+
+			hFamily := this.FontFamilyCreate(params.font)
+			hFont := this.FontCreate(hFamily, params.size, params.style)
+			hFormat := this.StringFormatCreate(params.formatStyle)
+			
+			VarSetCapacity(RC, 16)
+			NumPut(params.left, RC, 0, "float"), NumPut(params.top, RC, 4, "float")
+			NumPut(params.width, RC, 8, "float"), NumPut(params.height, RC, 12, "float")
+			
+			this.SetStringFormatAlign(hFormat, params.horizontalAlign)
+			this.SetTextRenderingHint(this.pGraphics, params.rendering)
+			
+			measure := this.MeasureString(this.pGraphics, content, hFont, hFormat, RC)
+			
+			if (params.verticalAlign = "top")
+			{
+			}
+			else if (params.verticalAlign = "middle")
+			{
+				top := params.top + (params.height - measure.height) / 2
+				NumPut(top, RC, 4, "float")
+			}
+			else if (params.verticalAlign = "bottom")
+			{
+				top := params.bottom - measure.height
+				NumPut(top, RC, 4, "float")
+			}
+			
+			E := this.DrawString(this.pGraphics, content, hFont, hFormat, params.brush.pointer, RC)
+			
+			this.DeleteStringFormat(hFormat)   
+			this.DeleteFont(hFont)
+			this.DeleteFontFamily(hFamily)
+			return measure
+		}
+		
+		FontFamilyCreate(font)
+		{
+			DllCall("gdiplus\GdipCreateFontFamilyFromName", "uptr", A_IsUnicode ? &font : &wFont, "uint", 0, "uptr*", hFamily)
+			return hFamily
+		}
+		
+		; Regular = 0
+		; Bold = 1
+		; Italic = 2
+		; BoldItalic = 3
+		; Underline = 4
+		; Strikeout = 8
+		FontCreate(hFamily, size, style=0)
+		{
+			DllCall("gdiplus\GdipCreateFont", "uptr", hFamily, "float", Size, "int", Style, "int", 0, "uptr*", hFont)
+			return hFont
+		}
+		
+		; StringFormatFlagsDirectionRightToLeft    = 0x00000001
+		; StringFormatFlagsDirectionVertical       = 0x00000002
+		; StringFormatFlagsNoFitBlackBox           = 0x00000004
+		; StringFormatFlagsDisplayFormatControl    = 0x00000020
+		; StringFormatFlagsNoFontFallback          = 0x00000400
+		; StringFormatFlagsMeasureTrailingSpaces   = 0x00000800
+		; StringFormatFlagsNoWrap                  = 0x00001000
+		; StringFormatFlagsLineLimit               = 0x00002000
+		; StringFormatFlagsNoClip                  = 0x00004000 
+		StringFormatCreate(format=0, lang=0)
+		{
+			DllCall("gdiplus\GdipCreateStringFormat", "int", format, "int", lang, "uptr*", hFormat)
+			return hFormat
+		}
+		
+		; Near = 0
+		; Center = 1
+		; Far = 2
+		SetStringFormatAlign(hFormat, align)
+		{
+			return DllCall("gdiplus\GdipSetStringFormatAlign", "uptr", hFormat, "int", align)
+		}
+		
+		SetTextRenderingHint(pGraphics, renderingHint)
+		{
+			return DllCall("gdiplus\GdipSetTextRenderingHint", "uptr", pGraphics, "int", renderingHint)
+		}
+		
+		MeasureString(pGraphics, sString, hFont, hFormat, ByRef RectF)
+		{
+			VarSetCapacity(RC, 16)
+			DllCall("gdiplus\GdipMeasureString", "uptr", pGraphics, "uptr", A_IsUnicode ? &sString : &wString, "int", -1, "uptr", hFont, "uptr", &RectF, "uptr", hFormat, "uptr", &RC, "uint*", Chars, "uint*", Lines)
+			return { left: NumGet(RC, 0, "float"), top: NumGet(RC, 4, "float"), width: NumGet(RC, 8, "float"), height: NumGet(RC, 12, "float"), characterCount: chars, lineCount: lines }
+		}
+		
+		DrawString(pGraphics, sString, hFont, hFormat, pBrush, ByRef RectF)
+		{
+			return DllCall("gdiplus\GdipDrawString", "uptr", pGraphics, "uptr", &sString, "int", -1, "uptr", hFont, "uptr", &RectF, "uptr", hFormat, "uptr", pBrush)
+		}
+		
+		DeleteStringFormat(hFormat)
+		{
+			return DllCall("gdiplus\GdipDeleteStringFormat", "uptr", hFormat)
+		}
+		
+		DeleteFont(hFont)
+		{
+			return DllCall("gdiplus\GdipDeleteFont", "uptr", hFont)
+		}
+		
+		DeleteFontFamily(hFamily)
+		{
+			return DllCall("gdiplus\GdipDeleteFontFamily", "uptr", hFamily)
 		}
 		
 		;pen, point, size
@@ -1768,6 +2013,13 @@ class Gdip
 				E1 := this.DrawRectangle(pen1, p1, s1)
 				E2 := this.FillRectangle(shape.brush, new Gdip.Point(p1, pWidth, pWidth), new Gdip.Size(s1.width - pWidth * 2, s1.height - pWidth * 2))
 				E := E1 | E2
+			}
+			
+			;MsgBox, % shape.content
+			if (shape.content != "")
+			{
+				;MsgBox, % shape.content "`n" shape.textBrush.pointer
+				this.WriteText(shape.content, { brush: shape.textBrush, left: shape.left, top: shape.top, width: shape.width, height: shape.height, horizontalAlign: shape.textAlign, verticalAlign: shape.verticalAlign, size: shape.fontSize })
 			}
 			return E
 		}
@@ -2002,59 +2254,5 @@ class Gdip
 		{
 			return DllCall("gdiplus\GdipGraphicsClear", "uptr", pGraphics, "int", ARGB)
 		}
-	}
-	
-	class Timer 
-	{
-		SetTimer(function, interval=0, paramObj=0)
-		{
-			static timers := {}, i := 0
-			for k, v in timers
-			{
-				if (v.toDelete)
-				{
-					timers.Remove(v.reference)
-				}
-			}
-			
-			if (IsFunc(function))
-			{
-				if (IsObject(timers[this]))
-				{
-					timer := timers[this]
-					E := DllCall("KillTimer", "uptr", 0, "uptr", timer.timer)
-					DllCall("GlobalFree", "ptr", timer.callBack)
-					timer.toDelete := true
-					this.SetTimer(function, interval, paramObj)
-					return E
-				}
-				else
-				{
-					timer := { function: function, reference: this, interval: interval, paramObj: paramObj, tick: A_TickCount, toDelete: false }
-					callBack := RegisterCallback(A_ThisFunc, "", "", &timer)
-					T := DllCall("SetTimer", "uptr", 0, "uptr", 0, "uint", interval, "uptr", callBack)
-					timer.timer := T
-					timer.callBack := callBack
-					timers[this] := timer
-					return T
-				}
-			}
-			else
-			{
-				if (IsObject(timer := Object(A_EventInfo)))
-				{
-					E := DllCall("KillTimer", "uptr", 0, "uptr", timer.timer)
-					func := timer.function
-					func.(timer.reference, timer.paramObj)
-
-					tick := ((A_TickCount - timer.tick) > timer.interval) ? 0 : timer.interval - (A_TickCount - timer.tick)
-					T := DllCall("SetTimer", "uptr", 0, "uptr", 0, "uint", tickl, "uptr", timer.callBack)
-					timer.timer := T
-					return T
-				}
-				else
-					throw "Unrecognized timer in Timer.SetTimer"
-			}
-		}			
 	}
 }
