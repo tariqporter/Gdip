@@ -45,7 +45,7 @@ win1.styleSheetInsert(css)
 
 win1.shapeInsert("#square1.squares.other-class").shapeInsert("#square2.squares").shapeInsert("#square3.squares.border-class")
 win1.shapeMatch(".squares").text("Loading...")
-win1.Update({ x: (A_ScreenWidth - win1.width) / 2 - 1200, y: (A_ScreenHeight - win1.height) / 2 })
+win1.Update({ x: (A_ScreenWidth - win1.width) / 2, y: (A_ScreenHeight - win1.height) / 2 })
 win1.MainLoop("Update", 10, { tick: A_TickCount, time: 800 })
 return
 
