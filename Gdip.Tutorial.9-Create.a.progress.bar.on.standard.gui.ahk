@@ -8,7 +8,7 @@
 SetBatchLines, -1
 
 ; Uncomment if Gdip.ahk is not in your standard library
-;#Include, Gdip.ahk
+#Include, Gdip.ahk
 
 ; Start gdi+
 If !pToken := Gdip_Startup()
@@ -25,6 +25,7 @@ OnExit, Exit
 ; This will be slower, but will use less RAM and will be modular (can all be put into a function)
 ; I will go with the 2nd option, but if more speed is a requirement then choose the 1st
 
+Gui, 1: -DPIScale
 ; I am first creating a slider, just as a way to change the percentage on the progress bar
 Gui, 1: Add, Slider, x10 y10 w400 Range0-100 vPercentage gSlider Tooltip, 50
 
@@ -56,7 +57,6 @@ Gdip_SetProgress(ByRef Variable, Percentage, Foreground, Background=0x00000000, 
 
 	; Create 2 brushes, one for the background and one for the foreground. Remember this is in ARGB
 	pBrushFront := Gdip_BrushCreateSolid(Foreground), pBrushBack := Gdip_BrushCreateSolid(Background)
-	
 	; Create a gdi+ bitmap the width and height that we found the picture control to be
 	; We will then get a reference to the graphics of this bitmap
 	; We will also set the smoothing mode of the graphics to 4 (Antialias) to make the shapes we use smooth
