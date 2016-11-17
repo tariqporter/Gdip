@@ -9,7 +9,7 @@
 SetBatchLines, -1
 
 ; Uncomment if Gdip.ahk is not in your standard library
-;#Include, Gdip.ahk
+#Include, Gdip.ahk
 
 ; Start gdi+
 If !pToken := Gdip_Startup()
@@ -28,17 +28,13 @@ Gui, 1: Show, NA
 ; Get a handle to this window we have created in order to update it later
 hwnd1 := WinExist()
 
-; If the image we want to work with does not exist on disk, then download it...
-If !FileExist("background.png")
-UrlDownloadToFile, http://www.autohotkey.net/~tic/background.png, background.png
-
 ; Get a bitmap from the image
 pBitmap := Gdip_CreateBitmapFromFile("background.png")
 
 ; Check to ensure we actually got a bitmap from the file, in case the file was corrupt or some other error occured
 If !pBitmap
 {
-	MsgBox, 48, File loading error!, Could not load the image specified
+	MsgBox, 48, File loading error!, Could not load 'background.png'
 	ExitApp
 }
 
