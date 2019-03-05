@@ -8,6 +8,8 @@
 
 ; Uncomment if Gdip.ahk is not in your standard library
 ;#Include, Gdip.ahk
+; Uncomment if BRA.ahk is not in your standard library
+;#Include, BRA.ahk
 
 ; Start gdi+
 If !pToken := Gdip_Startup()
